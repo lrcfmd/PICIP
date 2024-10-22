@@ -2,14 +2,13 @@ from simulating_phase_fractions import *
 from pymatgen.core.composition import Composition
 from pymatgen.core.periodic_table import Element
 from pymatgen.analysis.phase_diagram import PDPlotter
-from experimental_phase_fields import *
+from fielddata import *
 from multiprocessing import Pool
-from algorithm import *
+from phasefield import *
 from wtconversion import *
 import tqdm
 import time
 import istarmap
-import seaborn as sns
 import logging, sys
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -231,8 +230,8 @@ def run_batch_parallel_intermetallic(
 
 def setup_model_e(species_dict,k,u):
     phase_field=list(species_dict.keys())
-    e_data=PhaseField(phase_field)
-    model=all_information()
+    e_data=Field_Data(phase_field)
+    model=Phase_Field()
     model.set_mechanistic_parameters(k)
     model.unknown_phase=u
     model.setup_from_species_dict(
@@ -246,7 +245,7 @@ def setup_model_e(species_dict,k,u):
 
 def setup_model_c(species_dict,k,u):
     phase_field=list(species_dict.keys())
-    model=all_information()
+    model=Phase_Field()
     model.set_mechanistic_parameters(k)
     model.unknown_phase=u
     comp=Composition(u)
@@ -265,7 +264,7 @@ def setup_model_c(species_dict,k,u):
     return model
 
 def setup_model_c_intermetallic(phase_field,k,u):
-    model=all_information()
+    model=Phase_Field()
     model.set_mechanistic_parameters(k)
     model.unknown_phase=u
     comp=Composition(u)
@@ -728,10 +727,11 @@ if __name__ == "__main__":
     logging.getLogger('PIL.PngImagePlugin').disabled = True
 
 
+    #constant hyperparams
     param_dict={
         'Num. batches':15,
         'Min u %':0.1,
-        'Initial predicted error':0.02,
+        'p_e':0.02,
         'Experimental std':None,
         'Batch size':None,
         'Prior size':None,
@@ -745,14 +745,13 @@ if __name__ == "__main__":
         'line_len':50,
         'total_mass':1,
     }
-    #stds=[0.1,0.05,0.02]
-    stds=[0.1]
-    #kappas=[10000]
-    #batch_sizes=[1,3,5]
+
+    #variable Sigma_E Sigma_P and Batch size
+    stds=[0.03] #sigma E
+    p_e=[0.1] #
     batch_sizes=[1]
-    #prior_sizes=[1,3,5]
     prior_sizes=[1]
-    p_e=[0.02]
+
     repeats=50
     plotting=True
 
@@ -801,9 +800,11 @@ if __name__ == "__main__":
             '''
     #run computed
     for i in range(repeats):
-        df=run_batch_c(
-            species_dict,mechanistic_dict,param_dict,stds,batch_sizes,
-            prior_sizes,us,plotting=plotting)
+        for e in p_e:
+            param_dict['Initial predicted error']=e
+            df=run_batch_c(
+                species_dict,mechanistic_dict,param_dict,stds,batch_sizes,
+                prior_sizes,us,plotting=plotting)
         with open(filename, 'a') as f:
             df.to_csv(f, mode='a', header=f.tell()==0)
     #run computed parallel

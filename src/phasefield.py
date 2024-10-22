@@ -7,7 +7,7 @@ from simulating_phase_fractions import *
 from visualise_square import *
 import random
 
-class all_information:
+class Phase_Field:
     #overall class that contains most functions for processing information
     #aims not to handle input/ouput
     #aims to not be specific to use cases

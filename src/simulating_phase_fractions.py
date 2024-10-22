@@ -1,4 +1,4 @@
-#from algorithm import all_information
+#from algorithm import Phase_Field
 #from visualise_square import *
 from pymatgen.entries.computed_entries import ComputedEntry
 from pymatgen.analysis.phase_diagram import PhaseDiagram

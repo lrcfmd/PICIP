@@ -1,13 +1,13 @@
 from experimental_phase_fields import *
 from visualise_square import *
-from algorithm import *
-from experimental_phase_fields import *
+from phasefield import *
+from fielddata import *
 
 #code for mpds data
 #setup
 '''
-field=PhaseField(['Li','Al','B','O'])
-model=all_information()
+field=Field_Data(['Li','Al','B','O'])
+model=Phase_Field()
 basis=np.array([[-0.66714371, -0.24907388,  0.64936011,  0.26685749],
        [ 0.5488059 , -0.71072244,  0.38143889, -0.21952236]])
 species_dict={'Li':1,'Al':3,'B':3,'O':-2}
@@ -43,7 +43,7 @@ sys.exit()
 #code for pymatgen data
 #setup
 '''
-model=all_information()
+model=Phase_Field()
 species_dict={'Mg':2,'B':3,'O':-2,'F':-1}
 cube_size=50
 basis=np.array([[-0.7171759 ,  0.48331419, -0.21827093,  0.45213263],
@@ -246,7 +246,7 @@ print('Done')
 sys.exit()
 '''
 #error
-model=all_information()
+model=Phase_Field()
 species_dict={'Mg':2,'B':3,'O':-2,'F':-1}
 cube_size=50
 basis=np.array([[-0.7171759 ,  0.48331419, -0.21827093,  0.45213263],
@@ -285,7 +285,7 @@ for x in model.omega:
             data.append([cube_size*x/15,cube_size*y/15,label.reduced_formula])
 
 
-model=all_information()
+model=Phase_Field()
 species_dict={'Mg':2,'B':3,'O':-2,'F':-1}
 cube_size=500
 basis=np.array([[-0.7171759 ,  0.48331419, -0.21827093,  0.45213263],
@@ -574,7 +574,7 @@ sys.exit()
 
 #code for plotting diagram with unknown removed and area - MgBOF
 '''
-model=all_information()
+model=Phase_Field()
 species_dict={'Mg':2,'B':3,'O':-2,'F':-1}
 cube_size=50
 basis=np.array([[-0.7171759 ,  0.48331419, -0.21827093,  0.45213263],
@@ -718,7 +718,7 @@ sys.exit()
 '''
 #code for plotting phase with removed u: LiAlBO
 '''
-model=all_information()
+model=Phase_Field()
 species_dict={'Li':1,'Al':3,'B':3,'O':-2}
 cube_size=1
 basis=np.array([[ 0,0.70710678,-0.70710678,0],
@@ -742,7 +742,7 @@ model.setup_from_species_dict(species_dict,cube_size=cube_size,basis=basis)
 #model.setup_from_species_dict(species_dict,cube_size=cube_size,basis=basis)
 
 phase_field=list(species_dict.keys())
-e_data=PhaseField(phase_field)
+e_data=Field_Data(phase_field)
 model.add_simulator_e(e_data.pure_phases,e_data.triangles)
 
 
@@ -830,7 +830,7 @@ sys.exit()
 
 #code for plotting diagram with unknown removed and area - MgAlCU
 '''
-model=all_information()
+model=Phase_Field()
 species_dict=['Mg','Al','Cu']
 cube_size=50
 cp=[1/3,1/3,1/3]
@@ -971,7 +971,7 @@ sys.exit()
 '''
 #code for demonstrating affect of line between knowns length
 '''
-model=all_information()
+model=Phase_Field()
 species_dict={'Mg':2,'B':3,'O':-2,'F':-1}
 cube_size=50
 basis=np.array([[-0.7171759 ,  0.48331419, -0.21827093,  0.45213263],

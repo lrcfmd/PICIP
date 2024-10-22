@@ -1,4 +1,4 @@
-class PhaseField:
+class Field_Data:
     #class to store information for experimental phase fields
     #TODO streamline grabbing of data from mpds
     def __init__(self,phase_field):
