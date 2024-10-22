@@ -221,11 +221,18 @@ class Square():
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                 )
-
-            #self.fig.update_yaxes(
-            #    scaleanchor = "x",
-            #    scaleratio = 1,
-            #)
+            self.fig.update_xaxes(
+                constrain='domain',
+                zeroline=False,
+                tickfont_size=6
+            )
+            self.fig.update_yaxes(
+                scaleanchor = "x",
+                scaleratio = 1,
+                constrain='domain',
+                zeroline=False,
+                tickfont_size=6
+            )
             if title is not None:
                 self.fig.update_layout(title=dict(text=title))
             #self.fig.update_layout(showlegend=False)
@@ -459,7 +466,6 @@ class Square():
         else:
             fig=px.scatter(
                 df,x='x',y='y',hover_data=hover_data,**kwargs)
-            print(df)
 
         fig.update_traces(marker_size=s)
         if symbol is not None:

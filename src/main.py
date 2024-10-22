@@ -251,8 +251,7 @@ def setup_model_c(species_dict,k,u):
     model.unknown_phase=u
     comp=Composition(u)
     cp=[comp.get_atomic_fraction(Element(x)) for x in phase_field]
-    #DELETE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
-    #DELETE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
+    #plotting basis
     basis=np.array([[-0.7171759 ,  0.48331419, -0.21827093,  0.45213263],
        [ 0.32141217, -0.38569461, -0.57854191,  0.64282435]])
     model.setup_from_species_dict(
@@ -414,6 +413,8 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
     start=model.random_start_with_u(min_u,size=n_p)
 
     for point in start:
+        #old method
+        '''
         try:
             #get mass weights that have an error applied to them from vonmises 
             ps,ws=model.get_errored_mass_weights(
@@ -446,6 +447,33 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
             return list(param_dict.values())+results
             #store data incase cones need to be thiccened
         model.add_knowns_weights(ps,ws)
+            '''
+        #new method
+        try:
+            #get molar weights
+            ps,ws=model.get_errored_molar_weights(
+                point,'gaussian_relative+',u,std=std,min_u=min_u,comp=False)
+        except OnlyUException:
+            #Goal has been found!
+            result=[0,0,0,1]*(n+1)
+            result+=['Found',model.predicted_error]
+            logging.debug('Found at start')
+            return list(param_dict.values())+result
+
+        try:
+            model.add_sample(ps,ws,point,std=model.predicted_error)
+        except ZeroPException:
+            #model.show('all lines')
+            logging.debug(f'Interpolation failure at start: STD {std},'
+                          +' num points {len(model.s)}.')
+            cd=model.get_score('closest distance')
+            purity=model.get_score('purity')
+            results=[np.nan]*4*(n+1)
+            results+=['Nulled',model.predicted_error]
+            return list(param_dict.values())+results
+            #store data incase cones need to be thiccened
+        model.add_knowns_weights(ps,ws)
+        
 
 
     try:
@@ -459,8 +487,6 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
         result+=['Prior was null',model.predicted_error]
         #model.show('all lines')
         return list(param_dict.values())+result
-    if np.isnan(model.values).any():
-        raise Exception('Nan in model values')
     results=[]
     results.append(model.get_score('d_g_mu'))
     results.append(model.get_score('true_second_moment'))
@@ -477,7 +503,7 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
 
         #plot line for samples
         model.set_end_points_from_s()
-        for sample,e in zip(model.s,model.end_points):
+        for na,(sample,e) in enumerate(zip(model.s,model.end_points)):
             if n==0:
                 plot.plot_line(
                     sample,e,c='green',w=5,
@@ -485,7 +511,9 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
             else:
                 plot.plot_line(sample,e,c='green',w=5)
             plot.plot_point(
-                sample,label='Average known',s=20,w=4,symbol='133')
+                sample,label='sample',s=20,w=4,symbol='133')
+            plot.plot_point(
+                model.k[-1],label='known',s=20,w=4,symbol='134')
         setup_plot(
             plot,model,model.cube_size,filename='points_0',lines_etc=True,
             show=True)
@@ -517,8 +545,13 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
         #very very close to an edge
 
         for j,point in enumerate(model.next_batch):
+            '''
             try:
                 ps,ws=model.get_errored_mass_weights(
+                    point,'gaussian_relative+',u,std=std,min_u=min_u,comp=False)
+                    '''
+            try:
+                ps,ws=model.get_errored_molar_weights(
                     point,'gaussian_relative+',u,std=std,min_u=min_u,comp=False)
             except OnlyUException:
                 #Goal has been found!
@@ -537,6 +570,7 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
             else:
                 use_mean=True
                 p_changed=True
+                '''
                 predicted_errors=[model.predicted_error for x in ps]
                 moles,moles_error,formulas_standard=wt_convert.wt_to_moles(
                     ps,ws,phase_field=model.phase_field,
@@ -544,6 +578,9 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
                 k,sig=model.compute_k_sig(moles,formulas_standard,moles_error)
                 try:
                     model.add_sksig(point,k,sig,make_p=True)
+                    '''
+                try:
+                    model.add_sample(ps,ws,point,std=model.predicted_error)
                 except ZeroPException:
                     #model.show('all lines')
                     logging.debug(
@@ -555,7 +592,6 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
                     results+=['Nulled',model.predicted_error]
                     return list(param_dict.values())+results
                 #store data incase cones need to be thiccened
-                model.add_knowns_weights(ps,ws)
                 #ps_c=np.array([model.simulator.pure_phases[x] for x in ps])
                 #figb,az=plt.subplots(1)
                 #model.simulator.show(az)
@@ -646,6 +682,7 @@ def simulate(model,seed,param_dict,plotting=False,ind=True,method=None):
                 plot.make_binaries_as_corners()
                 plot.create_fig(corner_text=False,lw=2)
                 plot.plot_p(model.omega,model.values,s=4)
+                plot.fig.update_layout(title=str(i))
                 setup_plot(
                     plot,model,model.cube_size,filename=f'p_{i+1}',
                     lines_etc=True,show=True)
@@ -731,7 +768,7 @@ if __name__ == "__main__":
     param_dict={
         'Num. batches':15,
         'Min u %':0.1,
-        'Initial predicted error':0.02,
+        'Initial predicted error':0.1,
         'Experimental std':None,
         'Batch size':None,
         'Prior size':None,
@@ -740,29 +777,31 @@ if __name__ == "__main__":
     }
     mechanistic_dict={
         'cube_size':100,
-        'use_fib':True,
-        'demi_len':100,
-        'line_len':50,
-        'total_mass':1,
+        #'use_fib':True,
+        #'demi_len':100,
+        #'line_len':50,
+        #'total_mass':1,
+        'n_l':100,
+        'n_p':30,
     }
     #stds=[0.1,0.05,0.02]
-    stds=[0.1]
+    stds=[0.02,0.05,0.1]
     #kappas=[10000]
     #batch_sizes=[1,3,5]
     batch_sizes=[1]
     #prior_sizes=[1,3,5]
     prior_sizes=[1]
-    p_e=[0.02]
+    p_e=[0.02,0.05,0.1]
     repeats=50
-    plotting=True
+    plotting=False
 
     #specific data for phase fields
 
     #MgBOF phase_field
     species_dict={'Mg':2,'B':3,'O':-2,'F':-1}
-    #us=["Mg 6 B 2 O 6 F 6","Mg 20 B 12 O 36 F 4"]
-    us=["Mg 6 B 2 O 6 F 6"]
-    filename='../simulation/data/testing/MgBOF_plots.csv'
+    us=["Mg 6 B 2 O 6 F 6","Mg 20 B 12 O 36 F 4"]
+    #us=["Mg 6 B 2 O 6 F 6"]
+    filename='../simulation/data/testing/beta_test.csv'
     #MgAlCu  
     '''
     phase_field=['Mg','Al','Cu']
@@ -800,16 +839,16 @@ if __name__ == "__main__":
             df.to_csv(f, mode='a', header=f.tell()==0)
             '''
     #run computed
+    '''
     for i in range(repeats):
         df=run_batch_c(
             species_dict,mechanistic_dict,param_dict,stds,batch_sizes,
             prior_sizes,us,plotting=plotting)
         with open(filename, 'a') as f:
             df.to_csv(f, mode='a', header=f.tell()==0)
+            '''
     #run computed parallel
-    '''
     for i in range(60):
-        print(i)
         for e in p_e:
             param_dict['Initial predicted error']=e
             df=run_batch_parallel_c(
@@ -817,7 +856,6 @@ if __name__ == "__main__":
                 prior_sizes,us,repeats)
             with open(filename, 'a') as f:
                 df.to_csv(f, mode='a', header=f.tell()==0)
-                '''
     #run experimental
     '''
     for i in range(repeats):

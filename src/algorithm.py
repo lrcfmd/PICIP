@@ -5,7 +5,11 @@ from exceptions import *
 from scipy.optimize import linprog
 from simulating_phase_fractions import *
 from visualise_square import *
+from scipy.stats import beta
+from scipy.optimize import linprog
+import matplotlib.pyplot as plt
 import random
+import cdd as pcdd
 
 class all_information:
     #overall class that contains most functions for processing information
@@ -75,12 +79,16 @@ class all_information:
             normal_vectors,cube_size,contained_point,basis=basis,show=show)
 
 
-    def set_mechanistic_parameters(self,k):
+    def set_mechanistic_parameters(self,k,use_beta=True):
         self.cube_size=k['cube_size']
-        self.use_fib=k['use_fib']
-        self.demi_len=k['demi_len']
-        self.line_len=k['line_len']
-        self.total_mass=k['total_mass']
+        if use_beta:
+            self.n_l=k['n_l']
+            self.n_p=k['n_p']
+        else:
+            self.use_fib=k['use_fib']
+            self.demi_len=k['demi_len']
+            self.line_len=k['line_len']
+            self.total_mass=k['total_mass']
 
     def cartesian(self,arrays, out=None):
         #function for building grid (cartesian product)
@@ -259,6 +267,9 @@ class all_information:
     def get_errored_mass_weights(self,point,method,u,**kwargs):
         return self.simulator.get_errored_mass_weights(point,method,u,**kwargs)
 
+    def get_errored_molar_weights(self,point,method,u,**kwargs):
+        return self.simulator.get_errored_molar_weights(point,method,u,**kwargs)
+
     def get_composition_string(self,p):
         #function to return list of composition string for each constrained
         #point in array pos
@@ -393,13 +404,19 @@ class all_information:
             else:
                 return closest_point
 
-    def recompute_values_full(self):
+    def recompute_values_full(self,beta_method=True):
         new_values=np.empty((len(self.s),len(self.omega)))
-        for n in range(len(self.s)):
-            new_values[n]=self.create_density_from_sample(
-                *self.get_sksig(n),n=self.demi_len,
-                points_per_line=self.line_len,fib=self.use_fib)
-        self.values_full=new_values
+        if beta_method:
+            del self.values_full
+            del self.values
+            for s,ws,ks,std in zip(self.s,self.weights,self.knowns,self.beta_std):
+                self.compute_p_beta(ws,ks,s,std)
+        else:
+            for n in range(len(self.s)):
+                new_values[n]=self.create_density_from_sample(
+                    *self.get_sksig(n),n=self.demi_len,
+                    points_per_line=self.line_len,fib=self.use_fib)
+            self.values_full=new_values
 
     def create_density_from_sample(
             self,sample_point,avg_known,sigma,n=800, normalize=True,
@@ -457,28 +474,6 @@ class all_information:
             points,z,self.omega,method='linear',fill_value=0)
 
         if sum(p)==0:
-            '''
-            fig,axs=plt.subplots(1,3)
-            axs[0].scatter(self.omega[:,0],self.omega[:,1],c=p)
-            axs[0].scatter([sample_point[0]],[sample_point[1]],marker='x',label='s')
-            axs[0].scatter([avg_known[0]],[avg_known[1]],marker='x',label='k')
-            cp=self.convert_point_to_constrained(self.contained_point)
-            axs[0].scatter([cp[0]],[cp[1]],marker='x',label='g')
-            axs[1].scatter(points[:,0],points[:,1],c=z)
-            points=self.simulator.show(self.omega)
-            if points[0].shape[1]==4:
-                tpoints=[]
-                for t in points:
-                    t=self.convert_point_to_constrained(t)
-                    tpoints.append(t)
-                points=tpoints
-            for t in points:
-                for n,i in enumerate(t):
-                    for j in t[n+1:]:
-                        axs[2].plot([i[0],j[0]],[i[1],j[1]])
-            plt.legend()
-            plt.show()
-            '''
             raise ZeroPException()
         if np.any(p<0):
             if np.any(p< -1*tol):
@@ -487,6 +482,27 @@ class all_information:
                 p[p<0]=0
         if np.isnan(p).any():
             raise Exception('P contains NAN')
+
+            if hasattr(self,'values_full'):
+                self.values_full=np.append(self.values_full,[p],axis=0)
+            else:
+                self.values_full=p[np.newaxis,:]
+            if hasattr(self,'values'):
+                self.values*=p
+            else:
+                self.values=p
+        if hasattr(self,'s'):
+            self.s=np.append(self.s,[s],axis=0)
+        else:
+            self.s=s[np.newaxis,:]
+        if hasattr(self,'k'):
+            self.k=np.append(self.k,[k],axis=0)
+        else:
+            self.k=k[np.newaxis,:]
+        if hasattr(self,'sig'):
+            self.sig=np.append(self.sig,[sig],axis=0)
+        else:
+            self.sig=sig[np.newaxis,:]
         return(p/np.sum(p))
 
     def show(self,triangles=True):
@@ -701,4 +717,369 @@ class all_information:
         for j in self.simulator.triangles:
             plotter.plot_triangle_line([self.simulator.pure_phases[i] for i in j])
         plotter.show()
+
+    def map_to_ab_line(self,point, A, B):
+        """
+        Maps a point to a parameter t in [0, 1] along the line from A to B.
+        """
+        AB = B - A  # Vector from A to B
+        AP = point - A  # Vector from A to the point
+        t = np.dot(AP, AB) / np.dot(AB, AB)  # Projection of AP onto AB, normalized by the length of AB
+        return t
+
+    def compute_p_beta(self,weights,k_c,sample,std,n_l=None,n_p=None):
+            if n_l is None:
+                n_l=self.n_l
+            if n_p is None:
+                n_p=self.n_p
+            mean=weights[1]
+            # Calculate a and b using the mean and sigma
+            alpha=-1
+            beta_param=-1
+            while alpha<0 and beta_param < 0:
+                variance = std ** 2
+                common_factor = mean * (1 - mean) / variance - 1
+                alpha = mean * common_factor
+                beta_param = (1 - mean) * common_factor
+                std=std/1.2
+            
+            # Discretize the line between points a and b
+            line_points=self.discretise_known_simplex_2d(k_c[0],k_c[1],sample,n_l)[1:-1]
+
+            # Normalize these points to the range [0, 1]
+            normalised_points = [self.map_to_ab_line(point, k_c[0], k_c[1]) for point in line_points]
+
+            # Get the probability density function (PDF) of the Beta distribution
+            beta_pdf = beta.pdf(normalised_points, alpha, beta_param)
+
+            '''
+            scaled_pdf = beta_pdf / np.max(beta_pdf)  # Scale for visualization
+            # Plot the results
+            plt.figure(figsize=(8, 6))
+            plt.plot(normalized_points, scaled_pdf, label="Beta PDF")
+            plt.title(f"Beta Distribution with α={alpha}, β={beta_param} on the line from a to b")
+            plt.xlabel("Normalized distance between a and b")
+            plt.ylabel("Probability Density")
+            plt.legend()
+            plt.show()
+            '''
+            known_simplex=line_points
+            if np.any(np.isinf(beta_pdf)):
+                print('infa')
+            if np.any(np.isnan(beta_pdf)):
+                print('nana')
+                print(alpha)
+                print(beta_param)
+                print(normalised_points)
+                print(beta_pdf)
+
+            known_pdf=beta_pdf/sum(beta_pdf)
+            p=self.project_known_simplex(known_simplex,known_pdf,sample,n_p)
+            if hasattr(self,'values_full'):
+                self.values_full=np.append(self.values_full,[p],axis=0)
+                self.values=np.prod(self.values_full,axis=0)
+            else:
+                self.values_full=p[np.newaxis,:]
+                self.values=p
+
+    def add_sample(self,knowns,weights,sample,std=0.02,n_l=None,n_p=None,
+                   compute_p=True):
+
+        weights=np.array(weights)/sum(weights)
+        knowns=[Composition(k) for k in knowns]
+        k_s=np.array([[k.get_atomic_fraction(el) for el in self.phase_field] for k in knowns])
+        k_c=self.convert_point_to_constrained(k_s)
+
+        if compute_p:
+            self.compute_p_beta(weights,k_c,sample,std,n_l,n_p)
+        if hasattr(self,'s'):
+            self.s=np.append(self.s,[sample],axis=0)
+        else:
+            self.s=sample[np.newaxis,:]
+        k=weights[0]*k_c[0]+weights[1]*k_c[1]
+        if hasattr(self,'k'):
+            self.k=np.append(self.k,[k],axis=0)
+        else:
+            self.k=k[np.newaxis,:]
+        if hasattr(self,'weights'):
+            self.weights=np.append(self.weights,[weights],axis=0)
+        else:
+            self.weights=weights[np.newaxis,:]
+        if hasattr(self,'knowns'):
+            self.knowns=np.append(self.knowns,[k_c],axis=0)
+        else:
+            self.knowns=k_c[np.newaxis,:]
+        if hasattr(self,'beta_std'):
+            self.beta_std.append(std)
+        else:
+            self.beta_std=[std]
+
+    def project_known_simplex(self,known_simplex,known_pdf,sample,n_p,tol=1e-4):
+        lines=np.array(self.get_constraint_lines())
+        A=lines[:,:-1]
+        b=-1*lines[:,-1]
+        polygon_constraints={
+                'A':A,
+                'b':b
+                }
+        #polygon_constraints=
+        points=[]
+        values=[]
+        for x,p in zip(known_simplex,known_pdf):
+            line=[]
+            direction=sample-x
+            direction=direction/np.linalg.norm(direction)
+            end_point=self.find_intersection(polygon_constraints,x,sample)
+            l_ps=[(sample+x/(n_p-1)*(end_point-sample))
+                  for x in range(n_p)]
+            points+=l_ps
+            values+=[p]*n_p
+
+            #plotting
+            '''
+            plot=self.make_fig()
+            plot.plot_point(sample)
+            plot.plot_point(end_point)
+            plot.show()
+            '''
+
+        #plotting
+        '''
+        plot=self.make_fig()
+        plot.plot_p(points,values,s=2)
+        plot.plot_points_np(known_simplex)
+        plot.show()
+        '''
+
+        p=scipy.interpolate.griddata(
+            points,values,self.omega,method='linear',fill_value=0)
+        if sum(p)==0:
+            raise ZeroPException()
+        if np.any(p<0):
+            if np.any(p< -1*tol):
+                raise Exception('a P was < 0')
+            else:
+                p[p<0]=0
+        if np.isnan(p).any():
+            print('P contained nan')
+            p=np.nan_to_num(p)
+        return(p/np.sum(p))
+
+    def line_through_point(self, x, sample, t):
+        """/
+        Parametric line equation: 
+        Line starts at point x and passes through sample, parameterized by t.
+        """
+        return x + t * (sample - x)
+
+    def find_intersection(self, polygon_constraints, x, sample, epsilon=1e-2):
+        """
+        Find the intersectio    n of the line starting at x and passing through sample
+        with the edges of the polygon defined by polygon_constraints.
+        
+        polygon_constraints is an array of linear inequalities Ax <= b.
+        """
+        intersections = []
+        
+        # Parametric form of the line: x + t(sample - x), for t >= 0.
+        direction = sample - x
+        d=direction/np.linalg.norm(direction)
+
+        #plotting
+        '''
+        plot=self.make_fig()
+        plot.plot_point(x)
+        plot.plot_point(sample)
+        plot.plot_point(sample+d)
+        plot.show()
+        '''
+
+        # Iterate through each edge of the polygon, given by the inequalities Ax <= b
+        for i, (A_row, b_val) in enumerate(zip(polygon_constraints['A'], polygon_constraints['b'])):
+            # Find t such that A @ (x + t * (sample - x)) = b (i.e., intersection)
+            # This simplifies to A @ direction * t = b - A @ x
+            A_dot_dir = np.dot(A_row, direction)
+            
+            if A_dot_dir != 0:  # Only if the direction and edge are not parallel
+                t_intersect = (b_val - np.dot(A_row, x)) / A_dot_dir
+                
+                if t_intersect > 0:  # We only care about positive t values (forward in direction)
+                    # Compute intersection point
+                    intersection_point = self.line_through_point(x, sample, t_intersect)
+                    if np.linalg.norm(intersection_point - x) > epsilon:
+                        intersections.append(intersection_point)
+        
+        # Return the intersection point closest to x
+        if len(intersections) > 0:
+            distances = [np.linalg.norm(intersection - x) for intersection in intersections]
+            closest_intersection = intersections[np.argmin(distances)]
+            return closest_intersection
+        else:
+            print('no intersection found')
+            return None  # No intersection found (this should not happen in a bounded polygon)
+        
+    def find_corners_edges(self,A,add_corners_to_knowns=False):
+        '''
+        gets corners and edges of polyhedra
+        A:2d np matrix with columns as the constraining linear equations
+        returns in standard rep
+        '''
+        A = A.T
+        cp=self.contained_point
+        dim=A.shape[0]
+        plane_dim=dim-A.shape[1]
+        x=np.empty((plane_dim,dim))
+        for i in range(plane_dim):
+            x[i] = self.find_orthonormal(A)
+            A = np.hstack((A,np.array([x[i]]).T))
+        charge_basis=x
+        cons=[]
+        for i in range(dim):
+            con=[0]*dim
+            con[i]=1
+            cons.append(np.array(con))
+        cons_c=[]
+        if plane_dim==2:
+            for i in cons:
+                a=np.dot(i,charge_basis[0])
+                b=np.dot(i,charge_basis[1])
+                c=np.dot(i,cp)
+                cons_c.append([c,a,b])
+        elif plane_dim==3:
+            for i in cons:
+                a=np.dot(i,charge_basis[0])
+                b=np.dot(i,charge_basis[1])
+                c=np.dot(i,charge_basis[2])
+                d=np.dot(i,cp)
+                cons_c.append([d,a,b,c])
+        else:
+            raise Exception('Not implemented for polytope above 3d')
+        #create matric for polyhedra construction
+        mat=pcdd.Matrix(cons_c,linear=False)
+        mat.rep_type = pcdd.RepType.INEQUALITY
+        #create polyhedron
+        poly = pcdd.Polyhedron(mat)
+        #get corners
+        ext = poly.get_generators()
+        corners=[]
+        for i in ext:
+            corners.append(i[1:])
+        corners=np.array(corners)
+        #get edges
+        edges=[]
+        adjacencies = list(poly.get_adjacency())
+        for n,i in enumerate(adjacencies):
+            for j in list(i):
+                if j>n:
+                    edges.append([n,j])
+        corner_compositions=self.get_composition_string(corners)
+        corners=cp+np.einsum('ji,...j->...i',charge_basis,corners)
+        self.corners=corners
+        self.edges=edges
+        self.corner_compositions=corner_compositions
+        if add_corners_to_knowns:
+            knowns_mat=self.convert_standard_to_pymatgen(corners)
+            self.add_knowns(knowns_mat)
+             
+    def make_fig(self):
+        plot=Square(self)
+        plot.make_binaries_as_corners()
+        plot.create_fig()
+        return plot
+
+    def line_intersection(self,p1, p2, q1, q2):
+        """
+        Finds the intersection of two lines (p1->p2 and q1->q2).
+        Returns the intersection point.
+        """
+        A1 = p2[1] - p1[1]
+        B1 = p1[0] - p2[0]
+        C1 = A1 * p1[0] + B1 * p1[1]
+
+        A2 = q2[1] - q1[1]
+        B2 = q1[0] - q2[0]
+        C2 = A2 * q1[0] + B2 * q1[1]
+
+        det = A1 * B2 - A2 * B1
+        if det == 0:
+            return None  # The lines are parallel
+        else:
+            x = (B2 * C1 - B1 * C2) / det
+            y = (A1 * C2 - A2 * C1) / det
+            return np.array([x, y])
+
+    def rotate_vector(self,v, angle,sample):
+        rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)],
+                                    [np.sin(angle),  np.cos(angle)]])
+        return np.dot(rotation_matrix, v)+sample
+
+    def discretise_known_simplex_2d(self,start,stop,sample,n_l):
+        ''' Discretises known simplex in 2d. 
+theta=np.linspace(0,2*np.pi,n)
+            points=np.array([np.cos(theta),np.sin(theta)])
+            points=points.T
+                '''
+        # 1) Calculate vectors from the sample to start and stop
+        v1 = start - sample
+        v2 = stop - sample
+
+        # 2) Compute the angle between the two vectors
+        cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        angle = np.arccos(np.clip(cos_theta, -1.0, 1.0))  # Angle in radians
+        delta_angle = angle / (n_l - 1)  # Dividing the angle into n_l parts
+        cross_product = v1[0] * v2[1] - v1[1] * v2[0]
+        if cross_product<0:
+            delta_angle=-1*delta_angle
+
+
+        # 5) Generate points by rotating v1 by increments of delta_angle
+        rotated_points = [start]  # Start with the initial point
+        linea=stop-start
+        for i in range(1, n_l):
+            # Rotate the v1 vector by i * delta_angle
+            rotated_vector = self.rotate_vector(v1, i * delta_angle,sample)
+            intersection=self.line_intersection(sample,rotated_vector,start,stop)
+            if intersection is not None:
+                rotated_points.append(intersection)
+            else:
+                raise Exception('error finding line intersection')
+
+        rotated_points = np.array(rotated_points)
+
+        # 6) Visualize the result
+        
+
+        '''
+        plt.figure(figsize=(6, 6))
+        plt.plot([sample[0], start[0]], [sample[1], start[1]], 'b-')
+        plt.plot([sample[0], stop[0]], [sample[1], stop[1]], 'b-')
+        plt.scatter([start[0],stop[0]],[start[1],stop[1]])
+
+        # Plot the start, stop, and sample points
+        #plt.scatter(*start, color='green', label='Start')
+        #plt.scatter(*stop, color='blue', label='Stop')
+        #plt.scatter(*sample, color='red', label='Sample')
+
+        # Plot lines from sample to each rotated point
+        for point in rotated_points:
+            print(point)
+            #plt.plot(point)
+            #plt.plot([sample[0], point[0]], [sample[1], point[1]], 'b-')
+            #plt.scatter(*point, color='orange')  # Mark the rotated point
+        plt.scatter(rotated_points[:,0],rotated_points[:,1])
+        # Adjust the plot
+        #plt.xlim([min([start[0], stop[0], sample[0]]) - 1, max([start[0], stop[0], sample[0]]) + 1])
+        #plt.ylim([min([start[1], stop[1], sample[1]]) - 1, max([start[1], stop[1], sample[1]]) + 1])
+        plt.gca().set_aspect('equal', adjustable='box')
+        plt.grid(True)
+        plt.legend()
+        plt.title(f"Lines Emanating from Sample Point with Equal Delta Angle ({np.degrees(delta_angle):.2f}°)")
+        plt.show()
+        '''
+        return rotated_points
+
+
+
+                
+                
 

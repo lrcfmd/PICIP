@@ -44,13 +44,26 @@ class PhaseFractionSimulator:
             logging.debug('Warning sampled point did not contain u')
             return(None,None)
 
+    def get_errored_molar_weights(self,p,method,u,**kwargs):
+        ps,ws=self.get_errored_mass_weights(p,method,u,**kwargs)
+        wc=wt_converter()
+        weights_new=[]
+        for p,w in zip(ps,ws):
+            mass=wc.get_molar_mass(p)[0]
+            weights_new.append(w/mass)
+        weights_new=np.array(weights_new)/sum(weights_new)
+        molar_weights=[
+            w/wc.get_molar_mass(ph)[0] for ph,w in zip(ps,ws)]
+        molar_weights=np.array(molar_weights)/sum(molar_weights)
+        return (ps,molar_weights)
+
+
     def get_errored_mass_weights(self,p,method,u,**kwargs):
         phases,weights=self.get_mass_weights(p)
         if len(phases)==3:
             if not phases in all_phases:
                 all_phases.append(copy.deepcopy(phases))
             counts[all_phases.index(phases)]+=1
-        #print(u,":",phaases)
         weights=np.array(weights)/sum(weights)
         r_weights=[]
         if method=='gaussian':
@@ -124,6 +137,7 @@ class PhaseFractionSimulator:
                 weights=weights/sum(weights)
                 if len(phases)==1:
                     logging.debug('Convex hull was goal and only 1 other')
+                    raise SmallUException()
                 if len(phases)==2:
                     std=kwargs['std']
                     std=std+std*u_weight
@@ -234,7 +248,6 @@ class PhaseFractionSimulator:
         print('Getting triangle index')
         found_triangles=[]
         for n,j in enumerate(self.triangles):
-            print(n,j)
             Z=np.array([self.pure_phases[i] for i in j])
             if self.in_hull(Z,p):
                 print('Contains')
@@ -362,8 +375,11 @@ class PhaseFractionSimulatorComp(PhaseFractionSimulator):
         '''
         for k in self.pd.get_decomposition(Composition(comp)).keys():
             #print(k)
-            ps.append(k)
-        return ps
+            ps.append(k.composition.reduced_formula)
+        if 'BO2F3' in ps:
+            ps.remove('BO2F3')
+        ps=np.sort(np.array(ps))
+        return str(ps)
 
     def filter_omega(self,omega,void_triangles):
         new_omega=[]

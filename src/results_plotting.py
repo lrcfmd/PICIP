@@ -3,7 +3,60 @@ import re
 import pandas as pd
 import numpy as np
 
+#data reformat
+phase_fields=["MgBOF"]#,"MgAlCu","LiAlBO"]
+for field in phase_fields:
+    #df=pd.read_csv('../simulation/data/testing/'+field+'_'+str(f)+'.csv')
+    df=pd.read_csv('~/phd/PICIP/simulation/data/testing/beta_test.csv')
+    for i in df.columns:
+        print(i)
+    stds=df['Experimental std'].unique()
+    pes=df['Predicted error'].unique()
+    us=df['Unknown'].unique()
+    x=len(pes)*len(stds)*len(us)
+    repeats=len(df)/x
+    print(df.head())
+    print(f'{pes=}, {stds=}, {us=}, {repeats=}')
+    #df['Predicted error'].astype('string').hist(bins=100)
+    #plt.show()
+    #df=df.iloc[300*len(df['Unknown'].unique())]
+    #df=df[df['Prior size']==1]
+    df_new=pd.DataFrame()
+    df_new['Batch size']=df['Batch size']
+    df_new['End type']=df['End type']
+    df_new['Experimental std']=df['Experimental std']
+    df_new['Predicted error']=df['Predicted error']
+    df_new['Unknown']=df['Unknown']
+    df_new['Initial distance']=df['d(closest,u) for batch0']
+    df_new['Score 0']=df['purity for batch0']
+    df_new['Score 1']=df['purity for batch1']
+    df_new['Score 2']=df['purity for batch2']
+    df_new['Score 3']=df['purity for batch3']
+    df_new['Score 4']=df['purity for batch4']
+    df_new['Score 5']=df['purity for batch5']
+    df_new['Score 6']=df['purity for batch6']
+    df_new['Score 7']=df['purity for batch7']
+    df_new['Score 8']=df['purity for batch8']
+    df_new['Score 9']=df['purity for batch9']
+    df_new['Score 10']=df['purity for batch10']
+    df_new['Score 11']=df['purity for batch11']
+    df_new['Score 12']=df['purity for batch12']
+    df_new['Score 13']=df['purity for batch13']
+    df_new['Score 14']=df['purity for batch14']
+    df_new['Score 15']=df['purity for batch15']
+    df=df.replace('Mg 6 B 2 O 6 F 6','Mg$_3$B(OF)$_3$')
+    df=df.replace('Mg 20 B 12 O 36 F 4','Mg$_5$B$_3$O$_9$F')
+    #df_new.loc[(df_new['Score 14']!=df_new['Score 5'])&
+    #       (df_new['End type']=='Nulled'),'End type']='Nulled late'
+    #print(df_new['End type'].unique())
+    #df_new.to_csv(
+    #    '../simulation/data/testing/refined/'+field+"_"+str(f)+".csv",
+    #    index=False)
+    df_new.to_csv(
+        '~/phd/PICIP/simulation/data/testing/beta_refined.csv',
+        index=False)
 '''
+
 # Define the batch size to consider
 selected_batch_size = 1
 
@@ -1155,8 +1208,6 @@ for unknown in unknowns:
     '''
 
 #plot score vs sample number for all parameters each unknown
-
-
 '''
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -1166,19 +1217,25 @@ import os
 import matplotlib.cm as cm
 from matplotlib.colors import to_rgba
 
+width_in_inches = 7
+aspect_ratio = 3/4
+height_in_inches = 4
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = 8
+
 # Define phase field and experimental stds in increasing order
-phase_field = "MgAlCu"
+phase_field = "LiAlBO"
 experimental_stds = [0.02, 0.05, 0.1]
 
 # File location template
-data_file_template = '../simulation/data/compare_batches/{}.csv'
+data_file_template = '/home/danny/phd/composition_exploration/exploration_algorithm/simulation/data/compare_batches/{}.csv'
 predicted_errors = [0.01, 0.02, 0.04]
 
 # Directory to save the plots
 save_dir_template = '../simulation/unknown_all_figs/{}'
 
 # Batch sizes to consider
-batch_sizes = [5, 3, 1]
+batch_sizes = [1,3,5]
 
 # Read the CSV file for the current phase field
 df = pd.read_csv(data_file_template.format(phase_field))
@@ -1248,7 +1305,7 @@ samples = 15
 
 for unknown in unknowns:
     for exp_std_value in experimental_stds:
-        plt.figure(figsize=(12, 8))
+        plt.figure()
         
         for predicted_error in predicted_errors:
             base_color = to_rgba(base_colors[predicted_error])
@@ -1273,16 +1330,17 @@ for unknown in unknowns:
                     valid_samples, valid_medians,
                     yerr=[valid_lower_bounds, valid_upper_bounds],
                     label=f'$\\sigma_P={predicted_error}$, Batch size={batch_size}',
-                    capsize=10, elinewidth=0, markeredgewidth=3, color=c)
+                    capsize=10, elinewidth=0, markeredgewidth=3, color=c,
+                    linewidth=1.5)
         
         plt.xlabel('Number of Samples')
-        plt.ylabel('Percentage purity of unknown phase /%')
-        plt.title(f'Percentage purity of {unknown} vs total number of samples for $\\sigma_E={exp_std_value}$')
+        plt.ylabel('Purity Score /%')
+        #plt.title(f'Purity Score for {unknown} for $\\sigma_E={exp_std_value}$')
         plt.legend(title='Parameter choices')
         plt.grid(True)
 
         # Ensure the layout is tight
-        plt.tight_layout()
+        #plt.tight_layout()
         ax=plt.gca()
         ax.set_ylim([15,105])
         
@@ -1292,10 +1350,11 @@ for unknown in unknowns:
         os.makedirs(save_dir, exist_ok=True)
         
         # Save the plot
-        plt.savefig(f'{save_dir}/{clean_unknown}_std_{exp_std_value}.png', dpi=400)
+        plt.savefig(
+            f'{save_dir}/{clean_unknown}_std_{exp_std_value}.png', dpi=600)
         
         # Show the plot
-        plt.show()
+        #plt.show()
         '''
 #plot failure rate for all combinations each unknown
 '''
@@ -1305,12 +1364,17 @@ import numpy as np
 import re
 import os
 
+width_in_inches = 7
+height_in_inches = 4
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = 8
+
 # Define phase field and experimental stds in increasing order
 phase_field = "MgAlCu"
 experimental_stds = [0.02, 0.05, 0.1]
 
 # File location template
-data_file_template = '../simulation/data/compare_batches/{}.csv'
+data_file_template = '/home/danny/phd/composition_exploration/exploration_algorithm/simulation/data/compare_batches/{}.csv'
 predicted_errors = [0.01, 0.02, 0.04]
 
 # Directory to save the plots
@@ -1349,35 +1413,32 @@ for unknown in unknowns:
     x = np.arange(len(labels) // len(experimental_stds))  # the label locations
     width = 0.2  # the width of the bars
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots()
 
     for i, exp_std_value in enumerate(experimental_stds):
         rates = failure_rates[i::len(experimental_stds)]
         ax.bar(x + i * width, rates, width, label=f'$\\sigma_E={exp_std_value}$')
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
-    ax.set_xlabel('Predicted Error ($\sigma_P$) and Batch Size (BS)')
+    ax.set_xlabel('PICIP Error ($\sigma_P$) and Batch Size (BS)')
     ax.set_ylabel('Failure Rate /%')
-    ax.set_title(f'Failure Rate for {unknown}')
+    #ax.set_title(f'Failure Rate for {unknown}')
     ax.set_xticks(x + width)
     ax.set_xticklabels(labels[::len(experimental_stds)], rotation=45, ha='right')
     ax.set_ylim([0,70])
     ax.legend(title='Experimental std')
 
-    fig.tight_layout()
-
     # Create directory if it doesn't exist
     clean_unknown = re.sub(r'[\$\_\.\{\}]', '', unknown)
     save_dir = save_dir_template.format(clean_unknown)
     os.makedirs(save_dir, exist_ok=True)
-
-    # Save the plot
-    plt.savefig(f'{save_dir}/{clean_unknown}_failure_rate.png', dpi=400)
+    plt.gcf().subplots_adjust(bottom=0.25)  # Adjust the bottom space
 
     # Show the plot
-    plt.show()
+    plt.savefig(
+        f'{save_dir}/{clean_unknown}_failure_rate.png',dpi=600)
+    #plt.show()
     '''
-
 #Key note one, predicted error vs experimental std averaged
 '''
 import matplotlib.pyplot as plt
@@ -2165,7 +2226,10 @@ plt.show()
 '''
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
+impplt.savefig(
+    '../simulation/comparison graphs/batch_score_vs_n.png',
+    dpi=600,bbox_inches='tight')
+ort numpy as np
 import re
 import os
 
@@ -2303,6 +2367,7 @@ plt.tight_layout()
 plt.show()
 '''
 #batch sizes
+'''
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -2389,6 +2454,136 @@ plt.savefig(
     '../simulation/comparison graphs/batch_score_vs_n.png',
     dpi=600,bbox_inches='tight')
 plt.show()
+'''
+#compare old vs new
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import re
+import os
 
+width_in_inches = 16.51 / 2.54 *2
+aspect_ratio = 2.5/4
+height_in_inches = width_in_inches * aspect_ratio
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = 14
+
+# Define phase fields and corresponding areas
+#phase_fields = ["MgBOF", "MgAlCu", "LiAlBO"]
+experimental_stds = [0.02, 0.05, 0.1]
+predicted_errors = [0.01, 0.02, 0.04]
+predicted_errors_b = [0.02, 0.05, 0.1]
+
+# File location template
+data_file_template = '~/phd/composition_exploration/exploration_algorithm/simulation/data/compare_batches/{}.csv'
+
+# Batch sizes to consider
+batch_size = 1
+
+# Initialize an empty list to store the data
+all_data = []
+
+dfa = pd.read_csv(data_file_template.format('MgBOF'))
+dfb=pd.read_csv('../simulation/data/testing/beta_refined.csv')
+dfa = dfa[dfa['End type'] != 'Nulled']
+dfa= dfa[dfa['Batch size'] == batch_size]
+dfb = dfb[dfb['End type'] != 'Nulled']
+dfb = dfb[dfb['Batch size'] == batch_size]
+for i in dfb.columns:
+    print(i)
+
+# Function to calculate median and 68% error bounds
+def calculate_statistics(df, samples):
+    medians = []
+    lower_bounds = []
+    upper_bounds = []
+
+    for sample_num in range(0, samples+1):
+        col_name = f'Score {sample_num}'
+        if col_name in df.columns:
+            median = df[col_name].median() * 100
+            lower_bound = np.percentile(df[col_name], 16) * 100
+            upper_bound = np.percentile(df[col_name], 84) * 100
+
+            medians.append(median)
+            lower_bounds.append(median - lower_bound)
+            upper_bounds.append(upper_bound - median)
+        else:
+            medians.append(np.nan)
+            lower_bounds.append(np.nan)
+            upper_bounds.append(np.nan)
+
+    return medians, lower_bounds, upper_bounds
+
+# Plotting
+samples = 15
+
+colours={0.02:{0.01:'lightcoral',0.02:'orangered',0.04:'firebrick'},
+         0.05:{0.01:'palegreen',0.02:'lime',0.04:'olivedrab'},
+         0.1:{0.01:'deepskyblue',0.02:'blue',0.04:'blueviolet'}}
+
+for exp_std_value in experimental_stds:
+    for predicted_error in predicted_errors:
+        dfa_filtered = dfa[(dfa['Predicted error'] == predicted_error) &
+                                  (dfa['Experimental std'] == exp_std_value)]
+        medians, lower_bounds, upper_bounds = calculate_statistics(dfa_filtered, samples)
+
+        valid_indices = [i for i in range(samples+1)]
+        valid_medians = [medians[i] for i in valid_indices]
+        valid_lower_bounds = [lower_bounds[i] for i in valid_indices]
+        valid_upper_bounds = [upper_bounds[i] for i in valid_indices]
+        valid_samples = [i for i in valid_indices]
+
+        # Plot the medians and error bars
+        c=colours[exp_std_value][predicted_error]
+        plt.errorbar(
+            valid_samples, valid_medians,
+            yerr=[valid_lower_bounds, valid_upper_bounds],
+            label=f'$\\sigma_P={predicted_error}$',
+            capsize=10, elinewidth=0, markeredgewidth=3)
+
+
+    plt.xlabel('Number of Samples')
+    plt.ylabel('Purity Score /%')
+    #plt.title('Purity Score vs number of samples, averaged over all unknowns')
+    plt.legend(title='Parameter choices')
+    plt.grid(True)
+
+    for predicted_error in predicted_errors_b:
+        dfb_filtered = dfb[(dfb['Predicted error'] == predicted_error) &
+                                  (dfb['Experimental std'] == exp_std_value)]
+        medians, lower_bounds, upper_bounds = calculate_statistics(dfb_filtered, samples)
+
+        valid_indices = [i for i in range(samples+1)]
+        valid_medians = [medians[i] for i in valid_indices]
+        valid_lower_bounds = [lower_bounds[i] for i in valid_indices]
+        valid_upper_bounds = [upper_bounds[i] for i in valid_indices]
+        valid_samples = [i for i in valid_indices]
+
+        # Plot the medians and error bars
+        #c=colours[exp_std_value][predicted_error]
+        plt.errorbar(
+            valid_samples, valid_medians,
+            yerr=[valid_lower_bounds, valid_upper_bounds],
+            label=f'$\\sigma_P={predicted_error}$, beta',
+            capsize=10, elinewidth=0, markeredgewidth=3)
+
+    plt.xlabel('Number of Samples')
+    plt.ylabel('Purity Score /%')
+    #plt.title('Purity Score vs number of samples, averaged over all unknowns')
+    plt.legend(title='Parameter choices')
+    plt.grid(True)
+
+    # Ensure the layout is tight
+    #plt.tight_layout()
+
+    # Show the plot
+
+    # Set the text size to 10pt
+
+    #plt.savefig(
+    #    '../simulation/comparison graphs/uavg_score_vs_n.png',
+    #    dpi=600,bbox_inches='tight')
+    plt.show()
 
 
