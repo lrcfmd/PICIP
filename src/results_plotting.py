@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 
 #data reformat
+'''
 phase_fields=["MgBOF"]#,"MgAlCu","LiAlBO"]
 for field in phase_fields:
     #df=pd.read_csv('../simulation/data/testing/'+field+'_'+str(f)+'.csv')
@@ -55,6 +56,7 @@ for field in phase_fields:
     df_new.to_csv(
         '~/phd/PICIP/simulation/data/testing/beta_refined.csv',
         index=False)
+        '''
 '''
 
 # Define the batch size to consider
@@ -276,6 +278,7 @@ for unknown_value,area in zip(results['Unknown'].unique(),areas):
 #Comparison codes
 
 # Define phase fields and corresponding areas
+'''
 phase_fields = ["MgBOF", "MgAlCu", "LiAlBO"]
 areas_dict = {
     "MgBOF": [0.2163, 0.0687],
@@ -285,6 +288,7 @@ areas_dict = {
 
 # File location template
 file_template = '../simulation/data/compare_b=1/{}.csv'
+'''
 #compare area vs optimal predicted error
 '''
 
@@ -1439,7 +1443,176 @@ for unknown in unknowns:
         f'{save_dir}/{clean_unknown}_failure_rate.png',dpi=600)
     #plt.show()
     '''
+
 #Key note one, predicted error vs experimental std averaged
+#revised
+'''
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
+
+# -----------------------------------------------------------------------------
+# Figure and global text settings
+# -----------------------------------------------------------------------------
+width_in_inches = 16.51 / 2.54 * 2  # conversion and scaling
+aspect_ratio = 2.5 / 4
+height_in_inches = width_in_inches * aspect_ratio
+
+f1=18
+f2=16
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = f1  # all text will be size 14
+
+# -----------------------------------------------------------------------------
+# Define color palette (normalized RGB values)
+# -----------------------------------------------------------------------------
+palette = {
+    "white":       (1, 1, 1),
+    "black":       (0, 0, 0),
+    "sangre":      (195/255, 18/255, 30/255),
+    "neptune":     (3/255, 72/255, 161/255),
+    "pumpkin":     (1, 176/255, 28/255),
+    "clover":      (2/255, 118/255, 8/255),
+    "cerulean":    (29/255, 172/255, 214/255),
+    "cocoa":       (156/255, 83/255, 0),
+    "amethyst":    (153/255, 102/255, 204/255),
+    "orange red":  (1, 69/255, 0),
+    "ivory black": (41/255, 36/255, 33/255)
+}
+
+# -----------------------------------------------------------------------------
+# Define experimental parameters and file information
+# -----------------------------------------------------------------------------
+phase_fields = ["MgBOF", "MgAlCu", "LiAlBO"]
+experimental_stds = [0.02, 0.05, 0.1]
+predicted_errors = [0.01, 0.02, 0.04]
+
+data_file_template = '../simulation/data/compare_batches/{}.csv'
+batch_size = 1
+
+# -----------------------------------------------------------------------------
+# Load and combine the data from each phase field
+# -----------------------------------------------------------------------------
+all_data = []
+for phase_field in phase_fields:
+    df = pd.read_csv(data_file_template.format(phase_field))
+    df = df[df['End type'] != 'Nulled']
+    df = df[df['Batch size'] == batch_size]
+    all_data.append(df)
+
+combined_df = pd.concat(all_data)
+
+# -----------------------------------------------------------------------------
+# Define function to compute medians and 68% error bounds (16th and 84th percentiles)
+# -----------------------------------------------------------------------------
+def calculate_statistics(df, samples):
+    medians = []
+    lower_bounds = []
+    upper_bounds = []
+    for sample_num in range(samples + 1):
+        col_name = f'Score {sample_num}'
+        if col_name in df.columns:
+            median = df[col_name].median() * 100
+            lower = np.percentile(df[col_name], 16) * 100
+            upper = np.percentile(df[col_name], 84) * 100
+            medians.append(median)
+            lower_bounds.append(median - lower)
+            upper_bounds.append(upper - median)
+        else:
+            medians.append(np.nan)
+            lower_bounds.append(np.nan)
+            upper_bounds.append(np.nan)
+    return medians, lower_bounds, upper_bounds
+
+# -----------------------------------------------------------------------------
+# Define marker styles and colors for “redundant coding”
+#
+# We choose the marker shape based on experimental standard deviation and
+# the color (used for both the error-bar line and marker edge) based on the
+# predicted error.
+# -----------------------------------------------------------------------------
+marker_dict = {
+    0.02: 'o',  # circle
+    0.05: 's',  # square
+    0.1:  '^'   # triangle_up
+}
+
+color_dict = {
+    0.01: palette["sangre"],
+    0.02: palette["neptune"],
+    0.04: palette["pumpkin"]
+}
+
+samples = 15  # number of samples (x-axis runs from 0 to samples)
+
+# -----------------------------------------------------------------------------
+# Create the plot
+# -----------------------------------------------------------------------------
+fig, ax = plt.subplots()
+
+for exp_std_value in experimental_stds:
+    for predicted_error in predicted_errors:
+        df_filtered = combined_df[
+            (combined_df['Predicted error'] == predicted_error) &
+            (combined_df['Experimental std'] == exp_std_value)
+        ]
+        medians, lower_bounds, upper_bounds = calculate_statistics(df_filtered, samples)
+
+        x_values = list(range(samples + 1))
+        # Plot error bars with larger markers and redundant coding (marker + color)
+        ax.errorbar(
+            x_values, medians,
+            yerr=[lower_bounds, upper_bounds],
+            label=f'$\\sigma_P={predicted_error}$, $\\sigma_E={exp_std_value}$',
+            marker=marker_dict[exp_std_value],
+            markersize=10,                   # larger symbols
+            markerfacecolor=palette["white"],# white fill for the marker
+            markeredgecolor=color_dict[predicted_error],
+            color=color_dict[predicted_error],  # error bar line color
+            capsize=10,
+            elinewidth=2,                    # bolder error-bar lines
+            markeredgewidth=2,
+            linestyle='-',
+            linewidth=2
+        )
+
+# -----------------------------------------------------------------------------
+# Set axis labels, legend, and grid
+# -----------------------------------------------------------------------------
+ax.set_xlabel('Number of Samples')
+ax.set_ylabel('Purity Score /%')
+# ax.set_title('Purity Score vs number of samples, averaged over all unknowns')
+ax.legend(title='Parameter choices', fontsize=f2, title_fontsize=f1)
+
+# Use a light dashed grid (using a subtle black with some transparency)
+ax.grid(True, which='major', linestyle='--', linewidth=0.5, color=palette["black"], alpha=0.3)
+
+# -----------------------------------------------------------------------------
+# Customize ticks and spines for a bolder look with fewer major ticks
+# -----------------------------------------------------------------------------
+# Longer and thicker ticks
+ax.tick_params(axis='both', which='major', length=10, width=2, labelsize=f2,direction='in')
+ax.tick_params(axis='both', which='minor', length=5, width=1,direction='in')
+
+# For the x-axis, set major ticks every 5 units and a single minor tick every 2.5 units
+ax.xaxis.set_major_locator(MultipleLocator(5))
+ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+
+# For the y-axis, use an AutoMinorLocator so that there is 1 minor tick between majors
+ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+
+# Make the axis spines thicker
+for spine in ax.spines.values():
+    spine.set_linewidth(2)
+
+plt.savefig(
+    '../simulation/comparison graphs/new/uavg_score_vs_n.png',
+    dpi=600)
+
+plt.show()
+'''
 '''
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -1545,6 +1718,8 @@ plt.grid(True)
 #    dpi=600,bbox_inches='tight')
 plt.show()
 '''
+
+
 # dive, unklnowns where PE affects it the most and the least
 '''
 import matplotlib.pyplot as plt
@@ -1865,6 +2040,175 @@ import pandas as pd
 import numpy as np
 import re
 import os
+from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
+
+# -----------------------------------------------------------------------------
+# Define font sizes:
+# f1: Global font size and legend title (18)
+# f2: Axis tick labels and legend labels (16)
+# -----------------------------------------------------------------------------
+f1 = 18
+f2 = 16
+
+# -----------------------------------------------------------------------------
+# Figure size and global font settings
+# -----------------------------------------------------------------------------
+width_in_inches = 16.51 / 2.54 * 2
+aspect_ratio = 2.5 / 4
+height_in_inches = width_in_inches * aspect_ratio
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = f1  # Global font size
+
+# -----------------------------------------------------------------------------
+# Define color palette (normalized RGB values)
+# -----------------------------------------------------------------------------
+palette = {
+    "white":       (1, 1, 1),
+    "black":       (0, 0, 0),
+    "sangre":      (195/255, 18/255, 30/255),
+    "neptune":     (3/255, 72/255, 161/255),
+    "pumpkin":     (255/255, 176/255, 28/255),
+    "clover":      (2/255, 118/255, 8/255),
+    "cerulean":    (29/255, 172/255, 214/255),
+    "cocoa":       (156/255, 83/255, 0),
+    "amethyst":    (153/255, 102/255, 204/255),
+    "orange red":  (255/255, 69/255, 0),
+    "ivory black": (41/255, 36/255, 33/255)
+}
+
+# -----------------------------------------------------------------------------
+# Define phase fields and parameters
+# -----------------------------------------------------------------------------
+phase_fields = ["MgBOF", "MgAlCu", "LiAlBO"]
+experimental_std = 0.1
+predicted_errors = [0.01, 0.04]
+batch_size = 1
+
+# File location template
+data_file_template = '../simulation/data/compare_batches/{}.csv'
+
+# -----------------------------------------------------------------------------
+# Read and combine the data from all phase fields
+# -----------------------------------------------------------------------------
+all_data = []
+for phase_field in phase_fields:
+    df = pd.read_csv(data_file_template.format(phase_field))
+    df = df[df['End type'] != 'Nulled']  # Remove failures
+    df = df[df['Batch size'] == batch_size]
+    all_data.append(df)
+
+# Concatenate all data into a single DataFrame
+combined_df = pd.concat(all_data)
+
+# -----------------------------------------------------------------------------
+# Function to calculate median and 68% error bounds
+# -----------------------------------------------------------------------------
+def calculate_statistics(df, samples):
+    medians = []
+    lower_bounds = []
+    upper_bounds = []
+    for sample_num in range(0, samples+1):
+        col_name = f'Score {sample_num}'
+        if col_name in df.columns:
+            median = df[col_name].median() * 100
+            print(col_name)  # Debug print (remove if not needed)
+            lower_bound = np.percentile(df[col_name], 16) * 100
+            upper_bound = np.percentile(df[col_name], 84) * 100
+            medians.append(median)
+            lower_bounds.append(median - lower_bound)
+            upper_bounds.append(upper_bound - median)
+        else:
+            medians.append(np.nan)
+            lower_bounds.append(np.nan)
+            upper_bounds.append(np.nan)
+    return medians, lower_bounds, upper_bounds
+
+# -----------------------------------------------------------------------------
+# Define the unknowns along with their marker style and colors.
+# For each unknown, the tuple is: (marker, color for predicted error 0.01, color for predicted error 0.04)
+# Colors are chosen from the provided palette.
+# -----------------------------------------------------------------------------
+unknowns_to_plot = {
+    "MgAl$_2$Cu": ("o", palette["sangre"], palette["neptune"]),
+    "Li$_2$AlB$_5$O$_{10}$": ("s", palette["clover"], palette["orange red"])
+}
+
+samples = 15
+
+# -----------------------------------------------------------------------------
+# Create the plot
+# -----------------------------------------------------------------------------
+fig, ax = plt.subplots()
+
+for unknown, (marker, color_pe1, color_pe2) in unknowns_to_plot.items():
+    for pe, color in zip(predicted_errors, [color_pe1, color_pe2]):
+        df_filtered = combined_df[
+            (combined_df['Unknown'] == unknown) &
+            (combined_df['Predicted error'] == pe) &
+            (combined_df['Experimental std'] == experimental_std)
+        ]
+        medians, lower_bounds, upper_bounds = calculate_statistics(df_filtered, samples)
+        valid_samples = list(range(samples + 1))
+        valid_medians = [medians[i] for i in valid_samples]
+        valid_lower_bounds = [lower_bounds[i] for i in valid_samples]
+        valid_upper_bounds = [upper_bounds[i] for i in valid_samples]
+
+        # Plot the medians and error bars with larger markers and redundant coding.
+        ax.errorbar(
+            valid_samples, valid_medians,
+            yerr=[valid_lower_bounds, valid_upper_bounds],
+            label=f'{unknown}, $\\sigma_P$={pe}',
+            color=color,
+            marker=marker,
+            markersize=12,                   # Larger symbols
+            markerfacecolor=palette["white"],# White fill for markers
+            markeredgecolor=color,
+            capsize=10,
+            elinewidth=2,                    # Bolder error-bar lines
+            markeredgewidth=3,
+            linestyle='-',
+            linewidth=2
+        )
+
+# -----------------------------------------------------------------------------
+# Set axis labels, legend, and grid
+# -----------------------------------------------------------------------------
+ax.set_xlabel('Number of Samples')
+ax.set_ylabel('Purity Score /%')
+ax.legend(title='Parameter choices', title_fontsize=f1, fontsize=f2)
+ax.grid(True, which='major', linestyle='--', linewidth=0.5, color=palette["black"], alpha=0.3)
+
+# -----------------------------------------------------------------------------
+# Customize ticks and spines:
+# - Tick marks point inside the figure
+# - Longer and thicker ticks
+# - Fewer y-axis intervals (maximum 5 major ticks with one minor tick between majors)
+# -----------------------------------------------------------------------------
+ax.tick_params(axis='both', which='major', length=10, width=2, direction='in', labelsize=f2)
+ax.tick_params(axis='both', which='minor', length=5, width=1, direction='in')
+ax.xaxis.set_major_locator(MultipleLocator(5))
+ax.xaxis.set_minor_locator(MultipleLocator(2.5))
+ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+
+# Thicken the axis spines for a bolder look
+for spine in ax.spines.values():
+    spine.set_linewidth(2)
+
+# -----------------------------------------------------------------------------
+# Save and display the figure
+# -----------------------------------------------------------------------------
+plt.savefig('../simulation/comparison graphs/extreme_score_vs_n.png', dpi=600)
+plt.show()
+'''
+
+#extremecompare old
+'''
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import re
+import os
 
 width_in_inches = 16.51 / 2.54 *2
 aspect_ratio = 2.5/4
@@ -2075,6 +2419,168 @@ import pandas as pd
 import numpy as np
 import re
 import os
+from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
+
+# -----------------------------------------------------------------------------
+# Define font sizes:
+# f1: Global font size and legend title (18)
+# f2: Axis tick labels and legend labels (16)
+# -----------------------------------------------------------------------------
+f1 = 18
+f2 = 16
+
+# -----------------------------------------------------------------------------
+# Figure size and global font settings
+# -----------------------------------------------------------------------------
+width_in_inches = 16.51 / 2.54 * 2
+aspect_ratio = 2.5 / 4
+height_in_inches = width_in_inches * aspect_ratio
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = f1
+
+# -----------------------------------------------------------------------------
+# Define phase fields and parameters
+# -----------------------------------------------------------------------------
+phase_fields = ["MgBOF", "MgAlCu", "LiAlBO"]
+experimental_std = 0.1
+predicted_errors = [0.01, 0.04]
+batch_size = 1
+
+# File location template
+data_file_template = '../simulation/data/compare_batches/{}.csv'
+
+# -----------------------------------------------------------------------------
+# Read and combine the data from all phase fields, and create a mapping
+# -----------------------------------------------------------------------------
+all_data = []
+phase_field_mapping = {}
+for phase_field in phase_fields:
+    df = pd.read_csv(data_file_template.format(phase_field))
+    df = df[df['End type'] != 'Nulled']  # Remove failures
+    df = df[df['Batch size'] == batch_size]
+    df['Phase Field'] = phase_field  # Add phase field column
+    all_data.append(df)
+    # Map each unique unknown to its phase field
+    phase_field_mapping.update({unknown: phase_field for unknown in df['Unknown'].unique()})
+
+# Concatenate all data into a single DataFrame
+combined_df = pd.concat(all_data)
+
+# -----------------------------------------------------------------------------
+# Ensure the 'Area' column exists in the DataFrame
+# -----------------------------------------------------------------------------
+if 'Area' not in combined_df.columns:
+    raise ValueError("The dataframe must contain an 'Area' column.")
+
+# -----------------------------------------------------------------------------
+# Calculate the median score after sample number 6 for each unknown and predicted error,
+# then compute the score difference.
+# -----------------------------------------------------------------------------
+sample_num = 6
+results = []
+for unknown in combined_df['Unknown'].unique():
+    df_unknown = combined_df[(combined_df['Unknown'] == unknown) &
+                             (combined_df['Experimental std'] == experimental_std)]
+    col_name = f'Score {sample_num}'
+    if col_name in df_unknown.columns:
+        median_score_pe_01 = df_unknown[df_unknown['Predicted error'] == 0.01][col_name].median() * 100
+        median_score_pe_04 = df_unknown[df_unknown['Predicted error'] == 0.04][col_name].median() * 100
+        score_diff = median_score_pe_04 - median_score_pe_01
+        area = df_unknown['Area'].unique()[0]
+        phase_field = phase_field_mapping[unknown]
+        results.append({
+            'Unknown': unknown,
+            'Score Difference': score_diff,
+            'Area': area,
+            'Phase Field': phase_field
+        })
+
+results_df = pd.DataFrame(results)
+
+# -----------------------------------------------------------------------------
+# Define the color palette (normalized RGB values) from your provided mapping
+# -----------------------------------------------------------------------------
+palette = {
+    "white":       (1, 1, 1),
+    "black":       (0, 0, 0),
+    "sangre":      (195/255, 18/255, 30/255),
+    "neptune":     (3/255, 72/255, 161/255),
+    "pumpkin":     (255/255, 176/255, 28/255),
+    "clover":      (2/255, 118/255, 8/255),
+    "cerulean":    (29/255, 172/255, 214/255),
+    "cocoa":       (156/255, 83/255, 0),
+    "amethyst":    (153/255, 102/255, 204/255),
+    "orange red":  (255/255, 69/255, 0),
+    "ivory black": (41/255, 36/255, 33/255)
+}
+
+# -----------------------------------------------------------------------------
+# Define colors and marker styles for each phase field.
+# We choose colors that mimic the original blue/green/red mapping:
+# - "MgBOF" (blue) -> palette["neptune"]
+# - "MgAlCu" (green) -> palette["clover"]
+# - "LiAlBO" (red)   -> palette["sangre"]
+# -----------------------------------------------------------------------------
+colors = {
+    "MgBOF": palette["neptune"],
+    "MgAlCu": palette["clover"],
+    "LiAlBO": palette["sangre"]
+}
+markers = {
+    "MgBOF": "o",
+    "MgAlCu": "s",
+    "LiAlBO": "^"
+}
+
+# -----------------------------------------------------------------------------
+# Plot the score difference vs area for each unknown, grouped by phase field.
+# -----------------------------------------------------------------------------
+fig, ax = plt.subplots()
+
+for phase_field in phase_fields:
+    subset = results_df[results_df['Phase Field'] == phase_field]
+    ax.scatter(subset['Area'], subset['Score Difference'],
+               color=colors[phase_field],
+               label=phase_field,
+               marker=markers[phase_field],
+               s=150,                        # Larger symbol size
+               edgecolors=palette["white"],  # White marker edge
+               linewidth=2)
+
+ax.set_xlabel('Area of region containing unknown phase')
+ax.set_ylabel('Score$_6$ when $\sigma_p=0.04$ - Score$_6$ when $\sigma_p=0.01$')
+ax.legend(title='Phase Field', title_fontsize=f1, fontsize=f2)
+ax.grid(True, which='major', linestyle='--', linewidth=0.5, color=palette["black"], alpha=0.3)
+
+# -----------------------------------------------------------------------------
+# Customize tick marks and spines:
+# - Tick marks point inward with longer and thicker ticks.
+# - Limit the number of major ticks on each axis.
+# -----------------------------------------------------------------------------
+ax.tick_params(axis='both', which='major', length=10, width=2, direction='in', labelsize=f2)
+ax.tick_params(axis='both', which='minor', length=5, width=1, direction='in')
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+ax.xaxis.set_minor_locator(AutoMinorLocator(2))
+ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+
+for spine in ax.spines.values():
+    spine.set_linewidth(2)
+
+# -----------------------------------------------------------------------------
+# Save and display the figure
+# -----------------------------------------------------------------------------
+plt.savefig('../simulation/comparison graphs/delta_score_vs_area.png', dpi=600)
+plt.show()
+'''
+
+#delta area old
+'''
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import re
+import os
 
 width_in_inches = 16.51 / 2.54 *2
 aspect_ratio = 2.5/4
@@ -2147,6 +2653,141 @@ plt.savefig(
 plt.show()
 '''
 #average failure
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import os
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator
+
+# -----------------------------------------------------------------------------
+# Define font sizes:
+# f1: Global font size and legend title (18)
+# f2: Axis tick labels and legend labels (16)
+# -----------------------------------------------------------------------------
+f1 = 18
+f2 = 16
+
+# -----------------------------------------------------------------------------
+# Figure size and global font settings
+# -----------------------------------------------------------------------------
+width_in_inches = 16.51 / 2.54 * 2
+aspect_ratio = 2.5 / 4
+height_in_inches = width_in_inches * aspect_ratio
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = f1  # Global font size
+
+# -----------------------------------------------------------------------------
+# Define phase fields and parameters
+# -----------------------------------------------------------------------------
+phase_fields = ["MgBOF", "MgAlCu", "LiAlBO"]
+experimental_stds = [0.02, 0.05, 0.1]
+predicted_errors = [0.01, 0.02, 0.04]
+batch_size = 1
+
+# -----------------------------------------------------------------------------
+# File location template and data loading
+# -----------------------------------------------------------------------------
+data_file_template = '../simulation/data/compare_batches/{}.csv'
+all_data = []
+for phase_field in phase_fields:
+    df = pd.read_csv(data_file_template.format(phase_field))
+    df = df[df['Batch size'] == batch_size]
+    all_data.append(df)
+combined_df = pd.concat(all_data)
+
+# -----------------------------------------------------------------------------
+# Calculate average failure rates for each combination of experimental std and predicted error
+# -----------------------------------------------------------------------------
+failure_rates = []
+for exp_std in experimental_stds:
+    for pe in predicted_errors:
+        df_filtered = combined_df[(combined_df['Experimental std'] == exp_std) &
+                                  (combined_df['Predicted error'] == pe)]
+        # Compute the percentage of rows with End type equal to 'Nulled'
+        failure_rate = (df_filtered['End type'] == 'Nulled').mean() * 100  
+        failure_rates.append({
+            'Experimental std': exp_std,
+            'Predicted error': pe,
+            'Failure Rate': failure_rate
+        })
+
+failure_rates_df = pd.DataFrame(failure_rates)
+
+# -----------------------------------------------------------------------------
+# Plotting
+# -----------------------------------------------------------------------------
+fig, ax = plt.subplots()
+
+# Define the bar width and positions
+bar_width = 0.2
+bar_positions = np.arange(len(experimental_stds))
+
+# -----------------------------------------------------------------------------
+# Define the color palette (normalized RGB values from your provided mapping)
+# -----------------------------------------------------------------------------
+palette = {
+    "white":       (1, 1, 1),
+    "black":       (0, 0, 0),
+    "sangre":      (195/255, 18/255, 30/255),
+    "neptune":     (3/255, 72/255, 161/255),
+    "pumpkin":     (255/255, 176/255, 28/255),
+    "clover":      (2/255, 118/255, 8/255),
+    "cerulean":    (29/255, 172/255, 214/255),
+    "cocoa":       (156/255, 83/255, 0),
+    "amethyst":    (153/255, 102/255, 204/255),
+    "orange red":  (255/255, 69/255, 0),
+    "ivory black": (41/255, 36/255, 33/255)
+}
+
+# Map predicted errors to colors using the provided palette:
+# For example, here we use:
+# 0.01 -> neptune, 0.02 -> clover, 0.04 -> sangre
+color_mapping = {
+    0.01: palette["neptune"],
+    0.02: palette["clover"],
+    0.04: palette["sangre"]
+}
+
+# Plot each predicted error as a group of bars
+for i, pe in enumerate(predicted_errors):
+    pe_data = failure_rates_df[failure_rates_df['Predicted error'] == pe]
+    ax.bar(bar_positions + i * bar_width,
+           pe_data['Failure Rate'],
+           bar_width,
+           color=color_mapping[pe],
+           label=f'$\\sigma_P={pe}$')
+
+# -----------------------------------------------------------------------------
+# Set the x-axis labels and styling
+# -----------------------------------------------------------------------------
+# Retain the original x-axis labels for the bars and remove tick marks on the x-axis.
+ax.set_xticks(bar_positions + bar_width)
+ax.set_xticklabels([f'$\\sigma_E={std}$' for std in experimental_stds])
+# Remove tick marks on the x-axis by setting the tick length to 0.
+ax.tick_params(axis='x', which='both', length=0)
+
+ax.set_xlabel(r'Experimental Error ($\sigma_E$)')
+ax.set_ylabel('Average Failure Rate /%')
+ax.legend(title=r'Predicted Error ($\sigma_P$)', title_fontsize=f1, fontsize=f2)
+ax.grid(True, which='major', linestyle='--', linewidth=0.5, color=palette["black"], alpha=0.3)
+
+# -----------------------------------------------------------------------------
+# Customize tick marks and axis spines for a bolder look (only affecting the y-axis here)
+# -----------------------------------------------------------------------------
+ax.tick_params(axis='y', which='major', length=10, width=2, direction='in', labelsize=f2)
+ax.tick_params(axis='y', which='minor', length=5, width=1, direction='in')
+ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+for spine in ax.spines.values():
+    spine.set_linewidth(2)
+
+# -----------------------------------------------------------------------------
+# Save and display the figure
+# -----------------------------------------------------------------------------
+plt.savefig('../simulation/comparison graphs/avg_failure.png', dpi=600)
+plt.show()
+
+#average failure old
 '''
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -2226,10 +2867,7 @@ plt.show()
 '''
 import matplotlib.pyplot as plt
 import pandas as pd
-impplt.savefig(
-    '../simulation/comparison graphs/batch_score_vs_n.png',
-    dpi=600,bbox_inches='tight')
-ort numpy as np
+import numpy as np
 import re
 import os
 
@@ -2371,6 +3009,167 @@ plt.show()
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
+
+# -----------------------------------------------------------------------------
+# Define font sizes:
+# f1: Global font size and legend title (18)
+# f2: Axis tick labels and legend labels (16)
+# -----------------------------------------------------------------------------
+f1 = 18
+f2 = 16
+
+# -----------------------------------------------------------------------------
+# Figure size and global font settings
+# -----------------------------------------------------------------------------
+width_in_inches = 16.51 / 2.54 * 2
+aspect_ratio = 2.5 / 4
+height_in_inches = width_in_inches * aspect_ratio
+plt.rcParams['figure.figsize'] = (width_in_inches, height_in_inches)
+plt.rcParams['font.size'] = f1
+
+# -----------------------------------------------------------------------------
+# Define phase fields and parameters
+# -----------------------------------------------------------------------------
+phase_fields = ["MgBOF", "MgAlCu", "LiAlBO"]
+predicted_error = 0.02
+experimental_std = 0.05
+batch_sizes = [1, 3, 5]
+max_samples = 15
+
+# -----------------------------------------------------------------------------
+# File location template and data loading
+# -----------------------------------------------------------------------------
+data_file_template = '../simulation/data/compare_batches/{}.csv'
+all_data = []
+for phase_field in phase_fields:
+    df = pd.read_csv(data_file_template.format(phase_field))
+    all_data.append(df)
+combined_df = pd.concat(all_data)
+
+# -----------------------------------------------------------------------------
+# Filter the DataFrame
+# -----------------------------------------------------------------------------
+df_filtered = combined_df[
+    (combined_df['Predicted error'] == predicted_error) &
+    (combined_df['Experimental std'] == experimental_std) &
+    (combined_df['End type'] != 'Nulled')
+]
+
+# -----------------------------------------------------------------------------
+# Create a new figure for plotting
+# -----------------------------------------------------------------------------
+plt.figure(figsize=(12, 8))
+
+# -----------------------------------------------------------------------------
+# Define the color palette (normalized RGB values from your provided mapping)
+# -----------------------------------------------------------------------------
+palette = {
+    "white":       (1, 1, 1),
+    "black":       (0, 0, 0),
+    "sangre":      (195/255, 18/255, 30/255),
+    "neptune":     (3/255, 72/255, 161/255),
+    "pumpkin":     (255/255, 176/255, 28/255),
+    "clover":      (2/255, 118/255, 8/255),
+    "cerulean":    (29/255, 172/255, 214/255),
+    "cocoa":       (156/255, 83/255, 0),
+    "amethyst":    (153/255, 102/255, 204/255),
+    "orange red":  (255/255, 69/255, 0),
+    "ivory black": (41/255, 36/255, 33/255)
+}
+
+# -----------------------------------------------------------------------------
+# Define color and marker mappings for batch sizes:
+# - Batch size 1: sangre and circle ('o')
+# - Batch size 3: neptune and square ('s')
+# - Batch size 5: clover and triangle up ('^')
+# -----------------------------------------------------------------------------
+colors = {1: palette["sangre"], 3: palette["neptune"], 5: palette["clover"]}
+markers = {1: 'o', 3: 's', 5: '^'}
+
+# -----------------------------------------------------------------------------
+# Compute medians and error bounds for each batch size
+# -----------------------------------------------------------------------------
+for batch_size in batch_sizes:
+    # Determine sample numbers based on the batch size
+    sample_numbers = [0] + list(range(batch_size, max_samples + 1, batch_size))
+    medians = []
+    lower_bounds = []
+    upper_bounds = []
+    
+    for sample_num in sample_numbers:
+        # Determine the appropriate column name
+        if sample_num == 0:
+            col_name = 'Score 0'
+        else:
+            batch_index = sample_num // batch_size
+            col_name = f'Score {batch_index}'
+        
+        # Compute median and 68% error bounds if the column exists
+        if col_name in df_filtered.columns:
+            scores = df_filtered[df_filtered['Batch size'] == batch_size][col_name] * 100
+            median_score = scores.median()
+            lower = np.percentile(scores, 16)
+            upper = np.percentile(scores, 84)
+            medians.append(median_score)
+            lower_bounds.append(median_score - lower)
+            upper_bounds.append(upper - median_score)
+        else:
+            medians.append(np.nan)
+            lower_bounds.append(np.nan)
+            upper_bounds.append(np.nan)
+    
+    c = colors[batch_size]
+    m = markers[batch_size]
+    plt.errorbar(
+        sample_numbers, medians,
+        yerr=[lower_bounds, upper_bounds],
+        label=f'Batch size={batch_size}',
+        marker=m,
+        markersize=12,                    # Larger markers
+        markerfacecolor=palette["white"], # White fill for markers
+        markeredgecolor=c,
+        capsize=10,
+        elinewidth=2,                     # Bolder error-bar lines
+        markeredgewidth=3,
+        linestyle='-',
+        linewidth=2,
+        color=c
+    )
+
+# -----------------------------------------------------------------------------
+# Set labels, legend, and grid
+# -----------------------------------------------------------------------------
+plt.xlabel('Number of Samples')
+plt.ylabel('Purity Score /%')
+plt.legend(title='Parameter choices', title_fontsize=f1, fontsize=f2)
+plt.grid(True, which='major', linestyle='--', linewidth=0.5, color=palette["black"], alpha=0.3)
+
+# -----------------------------------------------------------------------------
+# Customize ticks and spines
+# -----------------------------------------------------------------------------
+ax = plt.gca()
+ax.tick_params(axis='both', which='major', length=10, width=2, direction='in', labelsize=f2)
+ax.tick_params(axis='both', which='minor', length=5, width=1, direction='in')
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+ax.xaxis.set_minor_locator(AutoMinorLocator(2))
+ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+for spine in ax.spines.values():
+    spine.set_linewidth(2)
+
+# -----------------------------------------------------------------------------
+# Save and display the figure
+# -----------------------------------------------------------------------------
+plt.savefig('../simulation/comparison graphs/batch_score_vs_n.png', dpi=600)
+plt.show()
+'''
+
+#batch sizes old
+'''
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 
 #setup for paper
 width_in_inches = 16.51 / 2.54 *2
@@ -2455,7 +3254,9 @@ plt.savefig(
     dpi=600,bbox_inches='tight')
 plt.show()
 '''
+
 #compare old vs new
+'''
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -2585,5 +3386,6 @@ for exp_std_value in experimental_stds:
     #    '../simulation/comparison graphs/uavg_score_vs_n.png',
     #    dpi=600,bbox_inches='tight')
     plt.show()
+    '''
 
 
