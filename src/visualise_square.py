@@ -426,7 +426,7 @@ class Square():
             self.ax.plot(
                 [start[0],end[0]],[start[1],end[1]],c=c,linewidth=w)
 
-    def plot_p(self,omega,values,s=0.5):
+    def plot_p(self,omega,values,s=0.5,label=None):
         #plot a heatmap (as a coloured scatter)
         if self.method=='plotly':
             df=pd.DataFrame(columns=['x','y'],data=omega)
@@ -443,6 +443,8 @@ class Square():
             valuesp=values/sum(values)
             self.ax.scatter(
                 omega[:,0],omega[:,1],c=valuesp**0.3,s=0.1,cmap='binary')
+        if label is not None:
+            fig.update_traces(name=label,showlegend=True)
 
     def custom_scatter(
             self,df,w=3,s=30,c=None,composition_text=False,symbol=None,
@@ -662,6 +664,12 @@ class Square():
             if symbol is None:
                 fig1.update_traces(name=legend,showlegend=True)
             self.fig=go.Figure(data=self.fig.data+fig1.data)
+
+    def show_3_panel_1s():
+        phase_field=self.phase_field
+        self.plot_p(phase_field.omega,phase_field.values_full[-1],label='last p')
+        self.plot_p(phase_field.omega,phase_field.values,label='all p')
+        self.show()
 
 
 
