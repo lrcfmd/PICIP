@@ -1,0 +1,6 @@
+numpy
+scipy
+pymatgen
+plotly
+pandas
+matplotlib
