@@ -34,7 +34,7 @@ From the project root (after activating the virtual environment):
 
 ```bash
 cd src
-python -c "from setup_phase_field import Phase_Field; from run_PICIP import PICIP, Sample; from visualise_cube import make_plotter; print('PICIP installed successfully')"
+python -c "from phase_field import Phase_Field; from picip import PICIP, Sample; from visualise_cube import make_plotter; print('PICIP installed successfully')"
 ```
 
 > **Note:** this command must be run from the `src/` directory — the modules are not installed as a package and must be imported from their location.

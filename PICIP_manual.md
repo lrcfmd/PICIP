@@ -54,7 +54,7 @@ When **multiple samples** share the same unknown phase, their individual densiti
 A `Phase_Field` defines the grid of compositions that PICIP reasons over. Choose the setup method that matches your system.
 
 ```python
-from setup_phase_field import Phase_Field
+from phase_field import Phase_Field
 pf = Phase_Field()
 ```
 
@@ -151,7 +151,7 @@ pf.setup_uncharged(["Fe", "Mn", "Ti"], precalculated_basis=<array>)  # reuse it
 A `Sample` holds one measured XRD result: the overall composition, the identified co-existing phases, and their Rietveld mass fractions.
 
 ```python
-from run_PICIP import PICIP, Sample
+from picip import PICIP, Sample
 
 sample = Sample(
     "s1",           # name — used in plot titles and legends

@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 import numpy as np
 from pymatgen.core import Composition
 
-from setup_phase_field import Phase_Field
-from run_PICIP import PICIP, Sample
+from phase_field import Phase_Field
+from picip import PICIP, Sample
 from visualise_cube import make_plotter
 
 

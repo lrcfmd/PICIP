@@ -13,8 +13,8 @@ Documentation
   3-D tutorial  : tutorial_3d.py
 """
 
-from setup_phase_field import Phase_Field
-from run_PICIP import PICIP, Sample
+from phase_field import Phase_Field
+from picip import PICIP, Sample
 from visualise_cube import make_plotter
 from pymatgen.core import Composition
 
