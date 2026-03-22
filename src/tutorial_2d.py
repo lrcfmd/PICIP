@@ -140,7 +140,7 @@ pred_both = picip_multi.run()    # combined probability density
 pl = make_plotter(pf)
 pl.plot_prediction_results(pred_a, plot_average_known=True)
 pl.plot_prediction_results(pred_b, plot_samples=False, visible='legendonly')
-pl.plot_prediction_results(pred_both, plot_samples=False, visible='legendonly')
+pl.plot_prediction_results(pred_both, plot_samples=False, visible='legendonly', plot_individual=False)
 pl.show(title="4. Multiple samples — toggle a, b, combined in legend")
 
 
