@@ -25,8 +25,8 @@ Documentation
   3-D tutorial : tutorial_3d.py
 """
 
-from phase_field import Phase_Field
-from visualise_cube import make_plotter
+from model.phase_field import Phase_Field
+from model.visualise_cube import make_plotter
 import numpy as np
 
 

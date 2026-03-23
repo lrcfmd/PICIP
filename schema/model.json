@@ -1,0 +1,34 @@
+{
+  "name": "picip",
+
+  "parameters": {
+    "elements": {
+      "type": "array",
+      "description": "Elements in the phase field (e.g. [\"Fe\", \"Mn\", \"Ti\"])"
+    },
+    "composition": {
+      "type": "string",
+      "description": "Measured sample composition as a pymatgen formula string (e.g. \"Fe2Mn4Ti4\")"
+    },
+    "knowns": {
+      "type": "array",
+      "description": "Known co-existing phases identified by XRD (list of formula strings)"
+    },
+    "mass_weights": {
+      "type": "array",
+      "description": "Rietveld mass fractions for each known phase (same order as knowns)"
+    },
+    "predicted_error": {
+      "type": "number",
+      "description": "Uncertainty in mass weights: 0 = precise, 1 = rough. Default 0.3"
+    },
+    "n_suggestions": {
+      "type": "integer",
+      "description": "Number of suggested next compositions to return. Default 5"
+    }
+  },
+
+  "dataset": {
+    "mime_type": "application/json"
+  }
+}

@@ -1,0 +1,20 @@
+[project]
+name = "picip"
+version = "0.1.0"
+description = "Probabilistic Isolation of Inorganic Crystalline Phases"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pymatgen",
+    "plotly",
+    "pandas",
+    "matplotlib",
+]
+
+[project.scripts]
+picip-run = "app.entrypoint:main"
+
+[tool.uv]
+package = true

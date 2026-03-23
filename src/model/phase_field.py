@@ -9,7 +9,7 @@ from scipy.stats import dirichlet, multivariate_normal
 from scipy.spatial import ConvexHull, Delaunay
 from scipy.interpolate import griddata 
 from itertools import combinations
-from exceptions import ZeroPException
+from .exceptions import ZeroPException
 import matplotlib.pyplot as plt
 from math import dist as deu
 import time

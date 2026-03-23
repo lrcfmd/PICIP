@@ -1,5 +1,12 @@
 *.pkl
 __pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
 output/*
 !output/.gitkeep
 tutorial_suggestions.*
+/data
