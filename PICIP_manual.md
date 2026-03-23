@@ -27,11 +27,11 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 
 After a Rietveld refinement you know:
 
-- The **overall sample composition** (measured, e.g. by ICP or stoichiometry)
-- The **identities** of the co-existing phases (from XRD peak matching)
-- The **mass fractions** of each *known* phase
+- The **overall sample composition**
+- The **identities** of the co-existing phases
+- The **estimated mass fractions** of each *known* phase
 
-What you do not know is the composition of any *unknown* phase — a phase whose peaks you can see but whose structure you have not yet solved.
+What you do not know is the composition or mass fraction of any *unknown* phase.
 
 ### Geometry
 
