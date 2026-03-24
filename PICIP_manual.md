@@ -16,8 +16,9 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 6. [Suggestions — what to synthesise next](#6-suggestions--what-to-synthesise-next)
 7. [Multiple samples](#7-multiple-samples)
 8. [Single-known (original PICIP) inference](#8-single-known-original-picip-inference)
-9. [Parameter reference](#9-parameter-reference)
-10. [Reference](#10-reference)
+9. [Composition spreading](#9-composition-spreading)
+10. [Parameter reference](#10-parameter-reference)
+11. [Reference](#11-reference)
 
 ---
 
@@ -372,7 +373,138 @@ The result is a broad cloud centred roughly opposite the known from the sample �
 
 ---
 
-## 9. Parameter reference
+## 9. Composition spreading
+
+`Spread` finds a set of compositions that are as evenly distributed as possible across a phase field — useful for planning an exploratory synthesis campaign where you want maximum coverage of the composition space. It uses Lloyd's algorithm (Voronoi relaxation): each point is iteratively moved to the centroid of its Voronoi cell until the arrangement is as uniform as possible.
+
+### Quick start
+
+```python
+from phase_field import Phase_Field
+from spread import Spread
+
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti"])
+
+spread = Spread(pf)
+result = spread.run(
+    n=10,            # number of compositions to suggest
+    num_repeats=50,  # independent restarts — higher gives a better solution
+)
+```
+
+`run` returns a `SpreadResult` with the suggested compositions. Plot with the usual plotter:
+
+```python
+from visualise_square import Square
+
+pl = Square(pf)
+pl.plot_spread_result(result)
+pl.show(title="Spread compositions")
+```
+
+### Known phases
+
+Register compositions that are already known so the algorithm avoids placing spread points near them:
+
+```python
+spread.add_known_phases(["FeMn", "FeTi", "MnTi"])
+result = spread.run(n=10, num_repeats=50)
+```
+
+Suggestions cluster in the unexplored region of the phase field, away from the known-phase markers.
+
+### 3-D phase fields
+
+Works identically with four elements — use `Cube` instead of `Square`:
+
+```python
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
+
+spread = Spread(pf)
+result = spread.run(n=10, num_repeats=30)
+
+from visualise_cube import Cube
+pl = Cube(pf)
+pl.plot_spread_result(result)
+pl.show()
+```
+
+### Spread quality — histogram diagnostic
+
+`evaluate_spread` opens a matplotlib figure showing two distributions:
+
+- **Worst coverage distance (dwcd):** how far the most isolated grid point is from its nearest suggestion. Smaller = better coverage.
+- **Minimum pairwise distance (dmpd):** the closest pair of suggestions. Larger = better separation.
+
+A good solution has similar dwcd and dmpd — the suggestions are well separated *and* they cover the field without leaving large gaps.
+
+```python
+spread.evaluate_spread(result_few)    # coarse coverage
+spread.evaluate_spread(result_many)   # fine coverage
+```
+
+### Precursor rounding
+
+When the phase field was set up with precursors, `simplify_to_precursors` snaps each spread point to the nearest composition achievable as a combination of those precursor powders:
+
+```python
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti"], precursors=["Fe3Mn", "FeTi2", "MnTi"])
+
+spread = Spread(pf)
+result = spread.run(n=8, num_repeats=30)
+result_rounded = spread.simplify_to_precursors(result, accuracy=2)
+```
+
+**What `accuracy` controls.** The algorithm expresses each composition as a combination of precursor formula units, normalized so that the amounts sum to the least common multiple (LCM) of the precursor formula sizes (e.g. Fe₃Mn=4, FeTi₂=3, MnTi=2 → LCM=12, computed automatically from the formula strings). `accuracy` rounds these LCM-normalized amounts to that many decimal places:
+
+| `accuracy` | Effect |
+|------------|--------|
+| `2` (default) | Two decimal places on the LCM scale — suitable for pure-element precursors with a fine balance |
+| `0` | Integer amounts — natural for compound precursors (Fe₂O₃, MnO) where formula units must be whole numbers |
+
+**What `accuracy` does not tell you.** The output amounts are dimensionless ratios on the LCM scale, not grams. To convert to lab quantities you need to:
+
+1. Choose a total number of moles for the batch (not set anywhere in the code — your decision based on sample size)
+2. Scale each precursor amount by `total_moles / LCM` to get moles of that precursor
+3. Multiply by the molar mass of the precursor formula unit to get grams to weigh
+
+The precision of your actual gram amounts depends on all three — `accuracy`, your total moles, and the precursor molar masses. `accuracy=2` does not mean two decimal places in grams.
+
+Inspect the rounded compositions and precursor amounts:
+
+```python
+for row, amounts in zip(result_rounded.points_standard, result_rounded.precursor_amounts):
+    label = "  ".join(f"{l}={a:.2f}" for l, a in zip(result_rounded.precursor_labels, amounts))
+    print(f"  Fe={row[0]:.3f}  Mn={row[1]:.3f}  Ti={row[2]:.3f}    ({label})")
+```
+
+### Saving results
+
+```python
+result.save("../output/spread_suggestions")    # writes a CSV
+```
+
+The CSV contains element mole fractions for each suggested composition. If `simplify_to_precursors` has been used, precursor formula-unit amounts are included as additional columns.
+
+---
+
+## 10. Parameter reference
+
+### `Spread.run`
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `n` | — | Number of compositions to suggest |
+| `num_repeats` | — | Independent restarts of Lloyd's algorithm; higher gives a better solution, slower |
+
+### `Spread.simplify_to_precursors`
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `accuracy` | 2 | Decimal places for precursor formula-unit amounts (normalized to sum to LCM of precursor formula sizes) |
 
 ### `Phase_Field.setup_*`
 
@@ -433,7 +565,7 @@ The result is a broad cloud centred roughly opposite the known from the sample �
 
 ---
 
-## 10. Reference
+## 11. Reference
 
 If you use PICIP in your work, please cite:
 

@@ -145,6 +145,7 @@ class Cube:
                 bordercolor='#CCCCCC',
                 borderwidth=1,
                 title=legend_title,
+                font=dict(size=s + 2),
             ),
         )
         if return_fig:
@@ -835,6 +836,43 @@ class Cube:
         else:
             trace.update(showlegend=False)  # type: ignore
         self.fig.add_trace(trace)
+
+    def plot_spread_result(self, result, s=6, plot_known_phases=True,
+                           color='#4CAF50', name='spread compositions'):
+        """
+        Overlay spread composition points on the 3-D figure.
+
+        Plots the suggested compositions from a :class:`SpreadResult` as
+        circle markers.  Optionally also plots the fixed known phases that were
+        used as constraints during spreading.
+
+        Parameters
+        ----------
+        result : SpreadResult
+            Object returned by ``Spread.run()``.
+        s : int, optional
+            Marker size. Default 6.
+        plot_known_phases : bool, optional
+            If ``True`` (default), also overlay the known phases used as fixed
+            sites during spreading, styled as amber diamond markers.
+        color : str, optional
+            Fill colour for the spread points. Default green ``'#4CAF50'``.
+        name : str, optional
+            Legend label for the spread points. Default ``'spread compositions'``.
+        """
+        labels = [f'<b>{i + 1}</b>' for i in range(len(result.points))]
+        self.plot_points(
+            result.points, color=color, name=name,
+            custom_labels=labels, s=s, marker='circle',
+            border_color='#222222', border_width=2,
+        )
+        if plot_known_phases and hasattr(self.phase_field, 'knowns_constrained'):
+            self.plot_points(
+                self.phase_field.knowns_constrained,
+                color='#E8A838', name='known phases',
+                s=s, marker='diamond',
+                border_color='#222222', border_width=2,
+            )
 
     def plot_suggestions(self, suggestions, s=6):
         """
