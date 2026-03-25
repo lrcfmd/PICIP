@@ -39,10 +39,10 @@ After a Rietveld refinement you know:
 
 - The **overall sample composition**
 - The presence of an *unknown* phase
-- The **identities** of *known* phases
-- The **mass fractions** of these *known* phases
+- The **identities** of the co-existing *known* phases
+- The **estimated mass fractions** of each *known* phase
 
-What you do not know is the composition of the *unknown* phase.
+What you do not know is the composition or mass fraction of any *unknown* phase.
 
 ### Geometry
 
