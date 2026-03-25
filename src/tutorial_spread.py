@@ -6,7 +6,7 @@ Sections:  1. Quick start  2. Known phases  3. 3-D phase field
 
 Uses Lloyd's algorithm (Voronoi relaxation) to find maximally spread-out
 compositions within a phase field — useful for planning exploratory synthesis
-campaigns where you want to cover the composition space as uniformly as possible.
+where you want to cover the composition space as uniformly as possible.
 
 Run top to bottom — each section opens a browser figure.
 
@@ -20,8 +20,7 @@ Documentation
 
 from phase_field import Phase_Field
 from spread import Spread
-from visualise_square import Square
-from visualise_cube import Cube
+from visualise_cube import make_plotter
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -39,7 +38,7 @@ result = spread.run(
     num_repeats=50,  # independent restarts (higher = better solution, slower)
 )
 
-pl = Square(pf)
+pl = make_plotter(pf)
 pl.plot_spread_result(result)
 pl.show(title="1. Quick start — 10 spread compositions, no known phases")
 
@@ -59,7 +58,7 @@ spread2 = Spread(pf2)
 spread2.add_known_phases(["FeMn", "FeTi", "MnTi"])   # three known phases
 result2 = spread2.run(n=10, num_repeats=50)
 
-pl2 = Square(pf2)
+pl2 = make_plotter(pf2)
 pl2.plot_spread_result(result2)
 pl2.show(title="2. With known phases — suggestions avoid FeMn, FeTi, MnTi")
 # ↑ Green points cluster away from the amber known-phase diamonds.
@@ -68,7 +67,7 @@ pl2.show(title="2. With known phases — suggestions avoid FeMn, FeTi, MnTi")
 # ══════════════════════════════════════════════════════════════════════════════
 # 3.  3-D PHASE FIELD — quaternary system
 #
-#     4 elements → 3-D tetrahedron.  Use the Cube plotter.
+#     4 elements → 3-D tetrahedron.  make_plotter handles this automatically.
 # ══════════════════════════════════════════════════════════════════════════════
 
 pf3 = Phase_Field()
@@ -78,7 +77,7 @@ spread3 = Spread(pf3)
 spread3.add_known_phases(["FeMn", "FeTi"])
 result3 = spread3.run(n=10, num_repeats=30)
 
-pl3 = Cube(pf3)
+pl3 = make_plotter(pf3)
 pl3.plot_spread_result(result3)
 pl3.show(title="3. 3-D phase field — Fe-Mn-Ti-Cu with known phases")
 
@@ -123,7 +122,7 @@ result5 = spread5.run(n=10, num_repeats=50)
 path = result5.save("../output/spread_suggestions")
 print(f"\n5. Saved to: {path}")
 
-pl5 = Square(pf5)
+pl5 = make_plotter(pf5)
 pl5.plot_spread_result(result5)
 pl5.show(
     title="5. Spread suggestions",

@@ -21,7 +21,7 @@ from pymatgen.core import Composition
 
 # Phase_Field defines the composition space PICIP operates over.
 # setup_uncharged: grid of all compositions summing to 1, no charge constraint.
-# 3 elements → 2-D triangle (Square).  See tutorial_setup.py for all setup options.
+# 3 elements → 2-D triangle — make_plotter returns a Square automatically.  See tutorial_setup.py for all setup options.
 pf = Phase_Field()
 pf.setup_uncharged(["Fe", "Mn", "Ti"])
 

@@ -6,6 +6,15 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 
 ---
 
+> **New here? Start with the tutorials:**
+> - `tutorials/tutorial_setup.py` — phase field setup (all options)
+> - `tutorials/tutorial_2d.py` — 2-D phase fields end to end
+> - `tutorials/tutorial_3d.py` — 3-D phase fields end to end
+>
+> Run any tutorial top to bottom; each section opens an interactive figure in your browser.
+
+---
+
 ## Contents
 
 1. [How it works](#1-how-it-works)
@@ -28,11 +37,12 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 
 After a Rietveld refinement you know:
 
-- The **overall sample composition** (measured, e.g. by ICP or stoichiometry)
-- The **identities** of the co-existing phases (from XRD peak matching)
-- The **mass fractions** of each *known* phase
+- The **overall sample composition**
+- The presence of an *unknown* phase
+- The **identities** of *known* phases
+- The **mass fractions** of these *known* phases
 
-What you do not know is the composition of any *unknown* phase — a phase whose peaks you can see but whose structure you have not yet solved.
+What you do not know is the composition of the *unknown* phase.
 
 ### Geometry
 
@@ -46,7 +56,7 @@ For each point on the known simplex, PICIP casts a ray from that point through t
 
 The probability density on each ray is proportional to the probability of the support point. Stacking all rays and interpolating onto the composition grid gives the full probability density over the phase field — the set of unknown compositions consistent with the measurement.
 
-When **multiple samples** share the same unknown phase, their individual densities are multiplied together (product of experts). The combined density is far narrower than any individual prediction because only compositions consistent with *all* samples simultaneously survive.
+When **multiple samples** share the same unknown phase, their individual densities are multiplied together. The combined density is far narrower than any individual prediction because only compositions consistent with *all* samples simultaneously survive.
 
 ---
 
@@ -295,7 +305,12 @@ suggestions = picip.suggest(
 )
 ```
 
-The first suggestion is the probability-weighted mean (most likely unknown composition). The remaining `n − 1` points are drawn from high-density regions with `min_dist` separation enforced to prevent clustering.
+Selection works in two steps:
+
+1. **Mean** — the probability-weighted centroid of the density, snapped to the nearest grid point. This is the single most likely unknown composition and is always returned first (`label = 'mean'`).
+2. **Sampled** — the remaining `n − 1` points are drawn sequentially by probability-weighted random sampling (`label = 'sampled'`). Before each draw, all grid points within `min_dist` of any already-chosen point (and of the measured sample compositions) are zeroed out, so each new point must lie in a fresh region of the density. This prevents clustering while still favouring high-probability areas.
+
+If `min_dist` is large enough that no valid candidates remain, fewer than `n` points are returned with a warning.
 
 ```python
 # Print
@@ -360,16 +375,18 @@ pred_dirichlet = picip.run(version='b')         # Dirichlet (default)
 
 ### How it differs from the Dirichlet method
 
-With 2+ knowns the mass fractions tell you exactly where on the known simplex the support point lies, so PICIP casts a specific ray through the sample. With one known there are no fractions to work with, so the algorithm instead:
+With 2+ knowns, the mass fractions define a known simplex (a line for two knowns, a triangle for three). The Dirichlet method places support across this simplex and casts rays from each support point through the sample.
 
-1. Fires `n_l` rays from the **sample point** outward in all directions on a hemisphere pointing away from the known phase.
-2. Weights each ray by a **Gaussian** in the perpendicular distance from the known to that ray — rays that nearly pass through the known get high weight; rays that miss it widely get low weight.
+With 1 known — or when `version='gaussian'` is used regardless of how many knowns there are — there is no simplex. Instead, support is a **Gaussian centred on the average known** (the mass-fraction-weighted centroid of all knowns, which for a single known is just that known composition itself). The algorithm then:
+
+1. Fires `n_l` rays from the **sample point** outward on a hemisphere pointing away from the average known.
+2. Weights each ray by a **Gaussian** in the perpendicular distance from the average known to that ray — rays that nearly pass through it get high weight; rays that miss it widely get low weight.
 3. Interpolates the weighted ray values onto the omega grid as usual.
 
-The result is a broad cloud centred roughly opposite the known from the sample — intentionally diffuse, because a single known provides limited information about the unknown. The cloud narrows with lower `predicted_error`.
+The result is a cone centred opposite the known from the sample. The cone narrows with lower `predicted_error`.
 
 > [!TIP]
-> If you have mass fractions available, always prefer 2 or more knowns — the Dirichlet method gives a much tighter prediction. The single-known mode is most useful early in an experiment when only one phase has been identified.
+> If you have mass fractions available, always prefer the Dirichlet method (`version='b'`, 2+ knowns) — it gives a much tighter prediction.
 
 ---
 
@@ -396,12 +413,14 @@ result = spread.run(
 `run` returns a `SpreadResult` with the suggested compositions. Plot with the usual plotter:
 
 ```python
-from visualise_square import Square
+from visualise_cube import make_plotter
 
-pl = Square(pf)
+pl = make_plotter(pf)
 pl.plot_spread_result(result)
 pl.show(title="Spread compositions")
 ```
+
+`make_plotter` returns the correct plotter automatically — Square for 2-D fields, Cube for 3-D.
 
 ### Known phases
 
@@ -416,7 +435,7 @@ Suggestions cluster in the unexplored region of the phase field, away from the k
 
 ### 3-D phase fields
 
-Works identically with four elements — use `Cube` instead of `Square`:
+Works identically with four elements — `make_plotter` picks the Cube automatically:
 
 ```python
 pf = Phase_Field()
@@ -425,8 +444,7 @@ pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
 spread = Spread(pf)
 result = spread.run(n=10, num_repeats=30)
 
-from visualise_cube import Cube
-pl = Cube(pf)
+pl = make_plotter(pf)
 pl.plot_spread_result(result)
 pl.show()
 ```
@@ -447,7 +465,7 @@ spread.evaluate_spread(result_many)   # fine coverage
 
 ### Precursor rounding
 
-When the phase field was set up with precursors, `simplify_to_precursors` snaps each spread point to the nearest composition achievable as a combination of those precursor powders:
+When the phase field was set up with precursors, `simplify_to_precursors` snaps each spread point to the nearest composition achievable from rounded amounts of precursors:
 
 ```python
 pf = Phase_Field()
@@ -458,20 +476,7 @@ result = spread.run(n=8, num_repeats=30)
 result_rounded = spread.simplify_to_precursors(result, accuracy=2)
 ```
 
-**What `accuracy` controls.** The algorithm expresses each composition as a combination of precursor formula units, normalized so that the amounts sum to the least common multiple (LCM) of the precursor formula sizes (e.g. Fe₃Mn=4, FeTi₂=3, MnTi=2 → LCM=12, computed automatically from the formula strings). `accuracy` rounds these LCM-normalized amounts to that many decimal places:
-
-| `accuracy` | Effect |
-|------------|--------|
-| `2` (default) | Two decimal places on the LCM scale — suitable for pure-element precursors with a fine balance |
-| `0` | Integer amounts — natural for compound precursors (Fe₂O₃, MnO) where formula units must be whole numbers |
-
-**What `accuracy` does not tell you.** The output amounts are dimensionless ratios on the LCM scale, not grams. To convert to lab quantities you need to:
-
-1. Choose a total number of moles for the batch (not set anywhere in the code — your decision based on sample size)
-2. Scale each precursor amount by `total_moles / LCM` to get moles of that precursor
-3. Multiply by the molar mass of the precursor formula unit to get grams to weigh
-
-The precision of your actual gram amounts depends on all three — `accuracy`, your total moles, and the precursor molar masses. `accuracy=2` does not mean two decimal places in grams.
+`accuracy` sets the number of decimal places used when rounding the precursor amounts. This ensures that compositions satisfying the imposed constraints (such as charge neutrality) can still be generated despite rounding errors.
 
 Inspect the rounded compositions and precursor amounts:
 

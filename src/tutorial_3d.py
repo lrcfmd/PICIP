@@ -21,7 +21,7 @@ from pymatgen.core import Composition
 
 # Phase_Field defines the composition space PICIP operates over.
 # setup_uncharged: grid of all compositions summing to 1, no charge constraint.
-# 4 elements → 3-D tetrahedron (Cube).  See tutorial_setup.py for all setup options.
+# 4 elements → 3-D tetrahedron — make_plotter returns a Cube automatically.  See tutorial_setup.py for all setup options.
 pf = Phase_Field()
 pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
 
