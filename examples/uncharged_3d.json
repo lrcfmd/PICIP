@@ -1,0 +1,27 @@
+{
+  "phase_field": {
+    "type": "uncharged",
+    "elements": ["Fe", "Mn", "Ti", "Cu"]
+  },
+
+  "samples": [
+    {
+      "name": "s1",
+      "composition": "Fe2Mn2Ti2Cu4",
+      "knowns": ["FeMn", "FeTi", "FeCu"],
+      "mass_weights": [0.25, 0.35, 0.40],
+      "predicted_error": 0.3
+    }
+  ],
+
+  "n_l": 50,
+  "n_p": 10,
+  "n_suggestions": 5,
+  "min_dist": 0.05,
+
+  "plot": {
+    "p_mode": "surface",
+    "top": 0.9,
+    "surface_opacity": 0.35
+  }
+}

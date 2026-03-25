@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "picip/input",
+  "title": "PICIP input",
+  "type": "object",
+  "required": ["phase_field", "samples"],
+
+  "properties": {
+
+    "phase_field": {
+      "description": "Phase field geometry and grid configuration.",
+      "type": "object",
+      "oneOf": [
+        {
+          "title": "uncharged",
+          "description": "All elements treated as neutral — only sum-to-one constraint.",
+          "properties": {
+            "type": { "const": "uncharged" },
+            "elements": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 2,
+              "description": "Element symbols, e.g. [\"Fe\", \"Mn\", \"Ti\"]"
+            },
+            "n_points":   { "type": "integer", "minimum": 1 },
+            "resolution": { "type": "integer", "minimum": 1 },
+            "precursors": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Formula strings for precursor phases. Restricts omega to their convex hull or reduces constrained_dim if all share a zero coordinate."
+            }
+          },
+          "required": ["elements"],
+          "additionalProperties": false
+        },
+        {
+          "title": "charged",
+          "description": "Each element has a single fixed formal charge — adds a charge-neutrality equality constraint.",
+          "properties": {
+            "type": { "const": "charged" },
+            "elements": {
+              "type": "object",
+              "additionalProperties": { "type": "number" },
+              "description": "Element symbol → formal charge, e.g. {\"Cu\": 2, \"S\": -2}"
+            },
+            "n_points":   { "type": "integer", "minimum": 1 },
+            "resolution": { "type": "integer", "minimum": 1 },
+            "precursors": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["type", "elements"],
+          "additionalProperties": false
+        },
+        {
+          "title": "charge_ranges",
+          "description": "Mixed-valence elements. Fixed charges are a scalar; variable charges are [min, max]. Grid is built uncharged then filtered post-hoc.",
+          "properties": {
+            "type": { "const": "charge_ranges" },
+            "elements": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [
+                  { "type": "number" },
+                  {
+                    "type": "array",
+                    "items": { "type": "number" },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                ]
+              },
+              "description": "Element symbol → charge. Scalar for fixed (e.g. \"O\": -2), two-element array for variable (e.g. \"Fe\": [2, 3])."
+            },
+            "n_points":   { "type": "integer", "minimum": 1 },
+            "resolution": { "type": "integer", "minimum": 1 },
+            "precursors": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["type", "elements"],
+          "additionalProperties": false
+        },
+        {
+          "title": "custom",
+          "description": "Arbitrary additional linear equality constraints (e.g. spinel stoichiometry). Each extra constraint reduces constrained_dim by one.",
+          "properties": {
+            "type": { "const": "custom" },
+            "species": {
+              "description": "Element list (no charge constraint) or charge dict (adds charge constraint on top of custom_con).",
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 2,
+                  "description": "Element symbols only — no automatic charge constraint."
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "oneOf": [
+                      { "type": "number" },
+                      {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "minItems": 2,
+                        "maxItems": 2
+                      }
+                    ]
+                  },
+                  "description": "Element → charge (scalar or [min, max]). Charge constraint is added automatically."
+                }
+              ]
+            },
+            "custom_con": {
+              "description": "One or more rows of the form c · x = 0. A 1-D array is a single extra constraint; a 2-D array supplies multiple. Length of each row must equal the number of elements.",
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "description": "Single constraint vector."
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": { "type": "number" }
+                  },
+                  "description": "Multiple constraint vectors (one per row)."
+                }
+              ]
+            },
+            "n_points":   { "type": "integer", "minimum": 1 },
+            "resolution": { "type": "integer", "minimum": 1 },
+            "precursors": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["type", "species", "custom_con"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One or more measured samples to run inference on.",
+      "items": {
+        "type": "object",
+        "required": ["name", "composition", "knowns", "mass_weights"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Identifier for this sample."
+          },
+          "composition": {
+            "type": "string",
+            "description": "Measured bulk composition as a formula string, e.g. \"Fe2Mn4Ti4\"."
+          },
+          "knowns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Known co-existing phases from XRD, e.g. [\"Fe3O4\", \"MnO\"]."
+          },
+          "mass_weights": {
+            "type": "array",
+            "items": { "type": "number", "exclusiveMinimum": 0 },
+            "minItems": 1,
+            "description": "Rietveld mass fractions, same order as knowns. Will be normalised to sum to 1."
+          },
+          "predicted_error": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.3,
+            "description": "Uncertainty in mass weights: 0 = precise, 1 = rough."
+          }
+        }
+      }
+    },
+
+    "version": {
+      "type": "string",
+      "enum": ["b", "gaussian"],
+      "default": "b",
+      "description": "Inference algorithm. 'b' uses the Dirichlet simplex method (PICIP-B). 'gaussian' forces the Gaussian hemisphere method (original PICIP-A from the paper), regardless of the number of known phases."
+    },
+
+    "n_l": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Number of lines used in the simplex discretisation."
+    },
+    "n_p": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Number of projection rays per line."
+    },
+    "n_suggestions": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 5,
+      "description": "Number of suggested next compositions to return."
+    },
+    "min_dist": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Minimum distance between suggestions in constrained-basis units. Omit for default spacing."
+    },
+
+    "plot": {
+      "type": "object",
+      "description": "Options for the output HTML figure. p_mode and surface_opacity only apply to 3-D phase fields (Cube plotter).",
+      "additionalProperties": false,
+      "properties": {
+        "p_mode": {
+          "type": "string",
+          "enum": ["all", "nonzero", "top", "surface"],
+          "default": "nonzero",
+          "description": "3-D only. How the probability density is rendered: 'all' plots every grid point, 'nonzero' plots points with p>0, 'top' plots the top fraction, 'surface' renders a convex-hull mesh."
+        },
+        "top": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.9,
+          "description": "Fraction of probability mass shown by 'top' and 'surface' modes."
+        },
+        "surface_opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.35,
+          "description": "3-D only. Opacity of the convex-hull surface when p_mode='surface'."
+        },
+        "show_comps_hover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show composition strings in hover tooltips."
+        },
+        "comp_precision": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 2,
+          "description": "Decimal places for compositions in hover text."
+        }
+      }
+    }
+  }
+}

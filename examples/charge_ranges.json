@@ -1,0 +1,27 @@
+{
+  "phase_field": {
+    "type": "charge_ranges",
+    "elements": {
+      "Fe": [2, 3],
+      "Mn": [2, 4],
+      "O": -2
+    }
+  },
+
+  "samples": [
+    {
+      "name": "s1",
+      "composition": "Fe4Mn2O8",
+      "knowns": ["Fe2O3", "MnO"],
+      "mass_weights": [0.6, 0.4],
+      "predicted_error": 0.3
+    }
+  ],
+
+  "n_suggestions": 5,
+
+  "plot": {
+    "p_mode": "surface",
+    "top": 0.9
+  }
+}

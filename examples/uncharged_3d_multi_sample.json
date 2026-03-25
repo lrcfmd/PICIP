@@ -1,0 +1,34 @@
+{
+  "phase_field": {
+    "type": "uncharged",
+    "elements": ["Fe", "Mn", "Ti", "Cu"]
+  },
+
+  "samples": [
+    {
+      "name": "c",
+      "composition": "Fe3.6Mn3.3Ti4.7Cu8.4",
+      "knowns": ["Fe3Mn", "FeTi3", "MnCu"],
+      "mass_weights": [0.30, 0.30, 0.40],
+      "predicted_error": 0.3
+    },
+    {
+      "name": "d",
+      "composition": "Fe3Mn2.24Ti6.96Cu7.8",
+      "knowns": ["Fe3Mn", "FeTi3", "MnCu"],
+      "mass_weights": [0.15, 0.55, 0.30],
+      "predicted_error": 0.3
+    }
+  ],
+
+  "n_l": 50,
+  "n_p": 10,
+  "n_suggestions": 5,
+  "min_dist": 0.05,
+
+  "plot": {
+    "p_mode": "surface",
+    "top": 0.9,
+    "surface_opacity": 0.35
+  }
+}

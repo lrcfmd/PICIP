@@ -1,0 +1,31 @@
+{
+  "phase_field": {
+    "type": "custom",
+    "species": {
+      "Fe": [2, 3],
+      "Mn": [2, 4],
+      "Co": [2, 3],
+      "O": -2,
+      "F": -1
+    },
+    "custom_con": [[4.0, 4.0, 4.0, -3.0, -3.0]]
+  },
+
+  "samples": [
+    {
+      "name": "s1",
+      "composition": "Fe2MnCoO3F",
+      "knowns": ["Fe3O4", "MnFe2O4"],
+      "mass_weights": [0.5, 0.5],
+      "predicted_error": 0.3
+    }
+  ],
+
+  "n_suggestions": 5,
+
+  "plot": {
+    "p_mode": "surface",
+    "top": 0.9,
+    "surface_opacity": 0.35
+  }
+}

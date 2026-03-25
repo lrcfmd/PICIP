@@ -1,0 +1,19 @@
+{
+  "phase_field": {
+    "type": "uncharged",
+    "elements": ["Fe", "Mn", "Ti"]
+  },
+
+  "samples": [
+    {
+      "name": "s1",
+      "composition": "Fe2Mn4Ti4",
+      "knowns": ["FeMn", "FeTi"],
+      "mass_weights": [0.3, 0.7],
+      "predicted_error": 0.3
+    }
+  ],
+
+  "n_suggestions": 5,
+  "min_dist": 0.05
+}
