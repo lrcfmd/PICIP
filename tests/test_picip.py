@@ -17,7 +17,7 @@ from pymatgen.core import Composition
 
 from model.phase_field import Phase_Field
 from model.picip import PICIP, Sample
-from visualise_cube import make_plotter
+from model.visualise_cube import make_plotter
 
 
 # ── shared fixtures ────────────────────────────────────────────────────────────

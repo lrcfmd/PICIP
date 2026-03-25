@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from model.phase_field import Phase_Field
 from model.picip import PICIP, Sample
-from visualise_cube import make_plotter
+from model.visualise_cube import make_plotter
 import numpy as np
 
 def check_pf(pf, label):
