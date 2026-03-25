@@ -36,8 +36,8 @@ import numpy as np
 #     to 1 is a valid point.
 #
 #     The constrained dimension equals (number of elements − 1):
-#       3 elements → 2-D triangle    → use Square for plotting
-#       4 elements → 3-D tetrahedron → use Cube  for plotting
+#       3 elements → 2-D triangle    → make_plotter returns a Square
+#       4 elements → 3-D tetrahedron → make_plotter returns a Cube
 #
 #     n_points controls the grid density (default 500 for 2-D, 1000 for 3-D).
 #     Higher → more grid points → smoother probability maps.
@@ -74,8 +74,8 @@ pl.show(title="1. setup_uncharged — Fe-Mn-Ti-Cu  (3-D tetrahedron)")
 #     Pass a dict of {element: formal_charge}.
 #
 #     One charge constraint is added on top of sum=1, so:
-#       4 elements + charge → 2-D  → Square
-#       5 elements + charge → 3-D  → Cube
+#       4 elements + charge → 2-D  → make_plotter returns a Square
+#       5 elements + charge → 3-D  → make_plotter returns a Cube
 #
 #     Note: 3 elements + charge → 1-D, which PICIP cannot handle.
 #     An error is raised if this occurs.
@@ -190,7 +190,7 @@ pl.show(title="5b. Precursors cut the 3-D field to a sub-region")
 # If all precursors lie on a lower-dimensional subspace, the field collapses
 # automatically.  Here we use 4 elements (normally 3-D) but all precursors
 # have Cu=0, so they only span the Fe-Mn-Ti face — a 2-D plane.
-# The field reduces from 3-D to 2-D and Square should be used for plotting.
+# The field reduces from 3-D to 2-D — make_plotter detects this automatically.
 
 pf_reduced = Phase_Field()
 pf_reduced.setup_uncharged(

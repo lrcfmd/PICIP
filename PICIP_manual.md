@@ -6,6 +6,15 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 
 ---
 
+> **New here? Start with the tutorials:**
+> - `tutorials/tutorial_setup.py` — phase field setup (all options)
+> - `tutorials/tutorial_2d.py` — 2-D phase fields end to end
+> - `tutorials/tutorial_3d.py` — 3-D phase fields end to end
+>
+> Run any tutorial top to bottom; each section opens an interactive figure in your browser.
+
+---
+
 ## Contents
 
 1. [How it works](#1-how-it-works)
@@ -16,8 +25,9 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 6. [Suggestions — what to synthesise next](#6-suggestions--what-to-synthesise-next)
 7. [Multiple samples](#7-multiple-samples)
 8. [Single-known (original PICIP) inference](#8-single-known-original-picip-inference)
-9. [Parameter reference](#9-parameter-reference)
-10. [Reference](#10-reference)
+9. [Composition spreading](#9-composition-spreading)
+10. [Parameter reference](#10-parameter-reference)
+11. [Reference](#11-reference)
 
 ---
 
@@ -28,6 +38,7 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 After a Rietveld refinement you know:
 
 - The **overall sample composition**
+- The presence of an *unknown* phase
 - The **identities** of the co-existing *known* phases
 - The **estimated mass fractions** of each *known* phase
 
@@ -45,7 +56,7 @@ For each point on the known simplex, PICIP casts a ray from that point through t
 
 The probability density on each ray is proportional to the probability of the support point. Stacking all rays and interpolating onto the composition grid gives the full probability density over the phase field — the set of unknown compositions consistent with the measurement.
 
-When **multiple samples** share the same unknown phase, their individual densities are multiplied together (product of experts). The combined density is far narrower than any individual prediction because only compositions consistent with *all* samples simultaneously survive.
+When **multiple samples** share the same unknown phase, their individual densities are multiplied together. The combined density is far narrower than any individual prediction because only compositions consistent with *all* samples simultaneously survive.
 
 ---
 
@@ -294,7 +305,12 @@ suggestions = picip.suggest(
 )
 ```
 
-The first suggestion is the probability-weighted mean (most likely unknown composition). The remaining `n − 1` points are drawn from high-density regions with `min_dist` separation enforced to prevent clustering.
+Selection works in two steps:
+
+1. **Mean** — the probability-weighted centroid of the density, snapped to the nearest grid point. This is the single most likely unknown composition and is always returned first (`label = 'mean'`).
+2. **Sampled** — the remaining `n − 1` points are drawn sequentially by probability-weighted random sampling (`label = 'sampled'`). Before each draw, all grid points within `min_dist` of any already-chosen point (and of the measured sample compositions) are zeroed out, so each new point must lie in a fresh region of the density. This prevents clustering while still favouring high-probability areas.
+
+If `min_dist` is large enough that no valid candidates remain, fewer than `n` points are returned with a warning.
 
 ```python
 # Print
@@ -359,20 +375,141 @@ pred_dirichlet = picip.run(version='b')         # Dirichlet (default)
 
 ### How it differs from the Dirichlet method
 
-With 2+ knowns the mass fractions tell you exactly where on the known simplex the support point lies, so PICIP casts a specific ray through the sample. With one known there are no fractions to work with, so the algorithm instead:
+With 2+ knowns, the mass fractions define a known simplex (a line for two knowns, a triangle for three). The Dirichlet method places support across this simplex and casts rays from each support point through the sample.
 
-1. Fires `n_l` rays from the **sample point** outward in all directions on a hemisphere pointing away from the known phase.
-2. Weights each ray by a **Gaussian** in the perpendicular distance from the known to that ray — rays that nearly pass through the known get high weight; rays that miss it widely get low weight.
+With 1 known — or when `version='gaussian'` is used regardless of how many knowns there are — there is no simplex. Instead, support is a **Gaussian centred on the average known** (the mass-fraction-weighted centroid of all knowns, which for a single known is just that known composition itself). The algorithm then:
+
+1. Fires `n_l` rays from the **sample point** outward on a hemisphere pointing away from the average known.
+2. Weights each ray by a **Gaussian** in the perpendicular distance from the average known to that ray — rays that nearly pass through it get high weight; rays that miss it widely get low weight.
 3. Interpolates the weighted ray values onto the omega grid as usual.
 
-The result is a broad cloud centred roughly opposite the known from the sample — intentionally diffuse, because a single known provides limited information about the unknown. The cloud narrows with lower `predicted_error`.
+The result is a cone centred opposite the known from the sample. The cone narrows with lower `predicted_error`.
 
 > [!TIP]
-> If you have mass fractions available, always prefer 2 or more knowns — the Dirichlet method gives a much tighter prediction. The single-known mode is most useful early in an experiment when only one phase has been identified.
+> If you have mass fractions available, always prefer the Dirichlet method (`version='b'`, 2+ knowns) — it gives a much tighter prediction.
 
 ---
 
-## 9. Parameter reference
+## 9. Composition spreading
+
+`Spread` finds a set of compositions that are as evenly distributed as possible across a phase field — useful for planning an exploratory synthesis campaign where you want maximum coverage of the composition space. It uses Lloyd's algorithm (Voronoi relaxation): each point is iteratively moved to the centroid of its Voronoi cell until the arrangement is as uniform as possible.
+
+### Quick start
+
+```python
+from phase_field import Phase_Field
+from spread import Spread
+
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti"])
+
+spread = Spread(pf)
+result = spread.run(
+    n=10,            # number of compositions to suggest
+    num_repeats=50,  # independent restarts — higher gives a better solution
+)
+```
+
+`run` returns a `SpreadResult` with the suggested compositions. Plot with the usual plotter:
+
+```python
+from visualise_cube import make_plotter
+
+pl = make_plotter(pf)
+pl.plot_spread_result(result)
+pl.show(title="Spread compositions")
+```
+
+`make_plotter` returns the correct plotter automatically — Square for 2-D fields, Cube for 3-D.
+
+### Known phases
+
+Register compositions that are already known so the algorithm avoids placing spread points near them:
+
+```python
+spread.add_known_phases(["FeMn", "FeTi", "MnTi"])
+result = spread.run(n=10, num_repeats=50)
+```
+
+Suggestions cluster in the unexplored region of the phase field, away from the known-phase markers.
+
+### 3-D phase fields
+
+Works identically with four elements — `make_plotter` picks the Cube automatically:
+
+```python
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
+
+spread = Spread(pf)
+result = spread.run(n=10, num_repeats=30)
+
+pl = make_plotter(pf)
+pl.plot_spread_result(result)
+pl.show()
+```
+
+### Spread quality — histogram diagnostic
+
+`evaluate_spread` opens a matplotlib figure showing two distributions:
+
+- **Worst coverage distance (dwcd):** how far the most isolated grid point is from its nearest suggestion. Smaller = better coverage.
+- **Minimum pairwise distance (dmpd):** the closest pair of suggestions. Larger = better separation.
+
+A good solution has similar dwcd and dmpd — the suggestions are well separated *and* they cover the field without leaving large gaps.
+
+```python
+spread.evaluate_spread(result_few)    # coarse coverage
+spread.evaluate_spread(result_many)   # fine coverage
+```
+
+### Precursor rounding
+
+When the phase field was set up with precursors, `simplify_to_precursors` snaps each spread point to the nearest composition achievable from rounded amounts of precursors:
+
+```python
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti"], precursors=["Fe3Mn", "FeTi2", "MnTi"])
+
+spread = Spread(pf)
+result = spread.run(n=8, num_repeats=30)
+result_rounded = spread.simplify_to_precursors(result, accuracy=2)
+```
+
+`accuracy` sets the number of decimal places used when rounding the precursor amounts. This ensures that compositions satisfying the imposed constraints (such as charge neutrality) can still be generated despite rounding errors.
+
+Inspect the rounded compositions and precursor amounts:
+
+```python
+for row, amounts in zip(result_rounded.points_standard, result_rounded.precursor_amounts):
+    label = "  ".join(f"{l}={a:.2f}" for l, a in zip(result_rounded.precursor_labels, amounts))
+    print(f"  Fe={row[0]:.3f}  Mn={row[1]:.3f}  Ti={row[2]:.3f}    ({label})")
+```
+
+### Saving results
+
+```python
+result.save("../output/spread_suggestions")    # writes a CSV
+```
+
+The CSV contains element mole fractions for each suggested composition. If `simplify_to_precursors` has been used, precursor formula-unit amounts are included as additional columns.
+
+---
+
+## 10. Parameter reference
+
+### `Spread.run`
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `n` | — | Number of compositions to suggest |
+| `num_repeats` | — | Independent restarts of Lloyd's algorithm; higher gives a better solution, slower |
+
+### `Spread.simplify_to_precursors`
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `accuracy` | 2 | Decimal places for precursor formula-unit amounts (normalized to sum to LCM of precursor formula sizes) |
 
 ### `Phase_Field.setup_*`
 
@@ -433,7 +570,7 @@ The result is a broad cloud centred roughly opposite the known from the sample �
 
 ---
 
-## 10. Reference
+## 11. Reference
 
 If you use PICIP in your work, please cite:
 

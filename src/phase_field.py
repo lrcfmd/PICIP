@@ -168,7 +168,7 @@ class Phase_Field:
         None
         """
         self.charge_ranges=True
-        species_list=species_dict.keys()
+        species_list=list(species_dict.keys())
         self.species_dict=species_dict
         self.setup_uncharged(species_list, n_points=n_points, resolution=resolution, precalculated_basis=precalculated_basis, precursors=precursors, print_basis=print_basis)
 

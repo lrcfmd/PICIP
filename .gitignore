@@ -1,5 +1,6 @@
 *.pkl
 __pycache__/
+*.egg-info/
 output/*
 !output/.gitkeep
 tutorial_suggestions.*

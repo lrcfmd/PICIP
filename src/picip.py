@@ -184,6 +184,8 @@ class Sample:
             ``['MgS', 'Al2S3']``.  Order must match the weights supplied to
             add_mass_weights() or add_molar_weights().
         """
+        if not knowns:
+            raise ValueError("knowns must not be empty.")
         self.knowns=[Composition(k) for k in knowns]
 
     def add_molar_weights(self, mol_weights):
@@ -199,6 +201,13 @@ class Sample:
             Relative molar amounts for each known phase.  Need not be normalised.
             Order must match the list passed to add_knowns().
         """
+        if len(mol_weights) != len(self.knowns):
+            raise ValueError(
+                f"mol_weights length ({len(mol_weights)}) does not match "
+                f"knowns length ({len(self.knowns)})."
+            )
+        if any(w <= 0 for w in mol_weights):
+            raise ValueError("All mol_weights must be positive.")
         self.weights=np.array(mol_weights)/sum(mol_weights)
         molar_masses=np.array([known.weight for known in self.knowns])
         # Derive mass fractions from mole amounts × molar mass
@@ -220,6 +229,13 @@ class Sample:
             Relative mass amounts for each known phase (e.g. Rietveld scale
             factors).  Need not be normalised.  Order must match add_knowns().
         """
+        if len(mass_weights) != len(self.knowns):
+            raise ValueError(
+                f"mass_weights length ({len(mass_weights)}) does not match "
+                f"knowns length ({len(self.knowns)})."
+            )
+        if any(w <= 0 for w in mass_weights):
+            raise ValueError("All mass_weights must be positive.")
         molar_masses = np.array([known.weight for known in self.knowns])
         weights = np.array(mass_weights) / molar_masses   # moles = mass / M
         self.weights = weights / sum(weights)
@@ -244,6 +260,8 @@ class Sample:
             The default 1e-4 keeps the density from becoming exactly zero in
             regions the simplex does not reach.  Rarely needs changing.
         """
+        if predicted_error <= 0:
+            raise ValueError(f"predicted_error must be positive, got {predicted_error}.")
         self.predicted_error = predicted_error
 
     
@@ -378,7 +396,7 @@ class PICIP:
         sample.average_k=np.sum(sample.weights[:,np.newaxis]*sample.knowns_constrained, axis=0)
 
         if sample.predicted_error is None:
-            raise Exception(f"Predicted error has not bee set for sample {sample.name}")
+            raise Exception(f"Predicted error has not been set for sample {sample.name}")
         self.samples.append(sample)
                                 
     @_requires_samples
@@ -441,6 +459,9 @@ class PICIP:
             samples=self.samples[sample_indexes]
             if name is None:
                 name=samples[0].name if len(samples)==1 else 'combined probability'
+
+        if version not in ('b', 'gaussian'):
+            raise ValueError(f"Unknown version '{version}'. Use 'b' (Dirichlet) or 'gaussian'.")
 
         if version=='b':
             p_densities=[]
@@ -538,6 +559,8 @@ class PICIP:
         -------
         Suggestions
         """
+        if n < 1:
+            raise ValueError(f"n must be at least 1, got {n}.")
         p     = prediction.prob_density.copy()
         p    /= p.sum()
         omega = self.phase_field.omega
