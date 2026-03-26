@@ -943,7 +943,7 @@ def make_plotter(phase_field):
     >>> pl.plot_prediction_results(pred)
     >>> pl.show()
     """
-    from visualise_square import Square
+    from .visualise_square import Square
     dim = phase_field.constrained_dim
     if dim == 2:
         return Square(phase_field)

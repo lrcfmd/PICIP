@@ -6,7 +6,7 @@ PICIP uses Bayesian inference to predict the composition of an *unknown* phase p
 
 ---
 
-> **New here? Start with the tutorials:**
+> **New here? Start with the tutorials** (clone the repo to get these):
 > - `tutorials/tutorial_setup.py` — phase field setup (all options)
 > - `tutorials/tutorial_2d.py` — 2-D phase fields end to end
 > - `tutorials/tutorial_3d.py` — 3-D phase fields end to end
@@ -65,7 +65,7 @@ When **multiple samples** share the same unknown phase, their individual densiti
 A `Phase_Field` defines the grid of compositions that PICIP reasons over. Choose the setup method that matches your system.
 
 ```python
-from phase_field import Phase_Field
+from picip import Phase_Field
 pf = Phase_Field()
 ```
 
@@ -224,7 +224,7 @@ pred_both = picip.run()       # all samples — densities multiplied together
 ## 5. Step 4 — Plot results
 
 ```python
-from visualise_cube import make_plotter
+from picip import make_plotter
 
 pl = make_plotter(pf)
 pl.plot_prediction_results(pred, plot_average_known=True)
@@ -397,8 +397,8 @@ The result is a cone centred opposite the known from the sample. The cone narrow
 ### Quick start
 
 ```python
-from phase_field import Phase_Field
-from spread import Spread
+from picip import Phase_Field
+from picip import Spread
 
 pf = Phase_Field()
 pf.setup_uncharged(["Fe", "Mn", "Ti"])
@@ -413,7 +413,7 @@ result = spread.run(
 `run` returns a `SpreadResult` with the suggested compositions. Plot with the usual plotter:
 
 ```python
-from visualise_cube import make_plotter
+from picip import make_plotter
 
 pl = make_plotter(pf)
 pl.plot_spread_result(result)

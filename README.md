@@ -2,14 +2,42 @@
 
 **Probabilistic Isolation of Inorganic Crystalline Phases** — Bayesian inference for predicting the composition of an unknown phase in a multi-phase XRD sample.
 
+## Installation
+
+```bash
+pip install picip
+```
+
+## Quick start
+
+```python
+from picip import PICIP, Phase_Field, Sample, make_plotter
+
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti"])
+
+sample = Sample("s1", "Fe2Mn4Ti4")
+sample.add_knowns(["FeMn", "FeTi"])
+sample.add_mass_weights([0.3, 0.7])
+sample.set_predicted_error(0.3)
+
+picip = PICIP(pf)
+picip.add_sample(sample)
+pred = picip.run()
+
+pl = make_plotter(pf)
+pl.plot_prediction_results(pred)
+pl.show()
+```
+
 ## Documentation
 
-- [Installation Guide](PICIP_installation.md) — requirements, setup, and verification
-- [User Manual](PICIP_manual.md) — full usage guide with worked examples
+- [Installation Guide](https://github.com/lrcfmd/PICIP/blob/main/PICIP_installation.md) — pip install, clone for tutorials, verify setup
+- [User Manual](https://github.com/lrcfmd/PICIP/blob/main/PICIP_manual.md) — full usage guide with worked examples
 
 ## Paper code
 
-The code used to generate results for the paper is preserved on the [`PICIP_paper`](../../tree/PICIP_paper) branch.
+The code used to generate results for the paper is preserved on the [`PICIP_paper`](https://github.com/lrcfmd/PICIP/tree/PICIP_paper) branch.
 
 ## Citation
 

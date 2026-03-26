@@ -18,9 +18,7 @@ Documentation
   2-D PICIP tutorial: tutorial_2d.py
 """
 
-from phase_field import Phase_Field
-from spread import Spread
-from visualise_cube import make_plotter
+from picip import Phase_Field, Spread, make_plotter
 
 
 # ══════════════════════════════════════════════════════════════════════════════

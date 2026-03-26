@@ -2,12 +2,7 @@
 Tests for all Phase_Field setup methods and post-setup modifiers.
 Run each block independently with if True/False.
 """
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
-from phase_field import Phase_Field
-from picip import PICIP, Sample
-from visualise_cube import make_plotter
+from picip import Phase_Field, PICIP, Sample, make_plotter
 import numpy as np
 
 def check_pf(pf, label):

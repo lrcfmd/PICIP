@@ -17,16 +17,13 @@ for a simplex must also pass for these non-simplex cases.
 """
 
 import os
-import sys
 import tempfile
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
-from phase_field import Phase_Field
-from spread import Spread, SpreadResult, SpreadResultWithPrecursors
+from picip import Phase_Field, Spread
+from picip.spread import SpreadResult, SpreadResultWithPrecursors
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────

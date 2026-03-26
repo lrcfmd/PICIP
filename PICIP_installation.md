@@ -3,53 +3,58 @@
 ## Requirements
 
 - Python 3.9 or later
-- The following packages (all available on PyPI):
 
-| Package | Purpose |
-|---------|---------|
-| `numpy` | Array operations |
-| `scipy` | Interpolation, statistics, spatial algorithms |
-| `pymatgen` | Composition parsing and conversion |
-| `plotly` | Interactive figures |
-| `pandas` | CSV export for suggestions |
-| `matplotlib` | Auxiliary plotting |
+## Option 1 — Install from PyPI
 
-## Install
-
-Clone the repository and install dependencies into a virtual environment:
+For use in your own scripts:
 
 ```bash
-git clone <repo-url>
+pip install picip
+```
+
+### Verify
+
+```python
+from picip import PICIP, Phase_Field, Sample, make_plotter, Spread
+print('PICIP installed successfully')
+```
+
+---
+
+## Option 2 — Clone the repository
+
+This is only needed if you want to run the tutorials or contribute to development. If you installed via pip you can skip this.
+
+```bash
+git clone https://github.com/lrcfmd/PICIP.git
 cd PICIP
 
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
-pip install -r src/requirements.txt
+pip install -e .
 ```
 
-## Verify
+The editable install (`-e`) means changes to files in `src/picip/` take effect immediately without reinstalling.
 
-From the project root (after activating the virtual environment):
+### Verify
 
 ```bash
-cd src
-python -c "from phase_field import Phase_Field; from picip import PICIP, Sample; from visualise_cube import make_plotter; print('PICIP installed successfully')"
+python -c "from picip import PICIP, Phase_Field, Sample, make_plotter, Spread; print('PICIP installed successfully')"
 ```
 
-> **Note:** this command must be run from the `src/` directory — the modules are not installed as a package and must be imported from their location.
-
-## Usage
-
-All scripts are run from the `src/` directory:
+### Tutorials
 
 ```bash
-cd src
-python tutorial_2d.py    # 2-D phase field tutorial
-python tutorial_3d.py    # 3-D phase field tutorial
+python tutorials/tutorial_setup.py   # phase field setup (all options)
+python tutorials/tutorial_2d.py      # 2-D phase fields end to end
+python tutorials/tutorial_3d.py      # 3-D phase fields end to end
+python tutorials/tutorial_spread.py  # composition spreading
 ```
 
-Each tutorial section opens an interactive figure in your browser.
+Each tutorial runs top to bottom and opens an interactive figure in your browser for each section.
+
+---
 
 ## Reference
 
