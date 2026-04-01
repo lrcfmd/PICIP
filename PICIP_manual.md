@@ -46,15 +46,15 @@ What you do not know is the composition or mass fraction of any *unknown* phase.
 
 ### Geometry
 
-PICIP works in **constrained composition space** — the simplex of all charge-neutral (or stoichiometry-neutral) compositions in your element system. For a ternary uncharged system this is a 2-D triangle; for a quaternary system it is a 3-D tetrahedron.
+PICIP works in **constrained composition space** — the polytope of all compositions which satisfy the defined constraints. This is a simplex if no constraints are considered, or some slice or subregion of that simplex if constaints such as charge neutrality or restricted precursors are imposed. For a ternary uncharged system this is a 2-D triangle, for a quaternary uncharged system this is a 3-D tetrahedron.
 
 All known phases occupy fixed points in this space. Their mass fractions define a probability distribution over the *known simplex* (the line between two knowns, or the triangle between three).
 
 ### Inference
 
-For each point on the known simplex, PICIP casts a ray from that point through the measured sample composition toward the opposite boundary. Any composition on that ray is consistent with the sample being a mixture of the known phases at that support point *plus* the unknown at some composition along the ray.
+For each point on the known simplex, PICIP casts a ray from that point through the measured sample composition toward the opposite boundary. Any composition on that ray is consistent with the sample being a mixture of the known phases at that support point in the known simplex *plus* the unknown at some composition along the ray.
 
-The probability density on each ray is proportional to the probability of the support point. Stacking all rays and interpolating onto the composition grid gives the full probability density over the phase field — the set of unknown compositions consistent with the measurement.
+The probability density on each ray is proportional to the probability of the support point. Stacking all rays and interpolating onto the composition grid gives the full probability density over the phase field — the set of unknown compositions consistent with the measurement with their corresponding probability.
 
 When **multiple samples** share the same unknown phase, their individual densities are multiplied together. The combined density is far narrower than any individual prediction because only compositions consistent with *all* samples simultaneously survive.
 
@@ -91,7 +91,7 @@ pf.setup_charged({"Fe": 3, "Mn": 2, "Ti": 4, "Cu": 2, "O": -2})   # 5 elements �
 
 ### Charged systems — mixed oxidation states
 
-Use when an element can take a range of oxidation states (e.g. Fe²⁺/Fe³⁺). Supply a `[min, max]` list for mixed-valence elements and a single value for fixed. The constrained dimension is `N − 2`.
+Use when an element can take a range of oxidation states (e.g. Fe²⁺/Fe³⁺). Supply a `[min, max]` list for mixed-valence elements and a single value for fixed. The constrained dimension is `N − 1`.
 
 ```python
 pf.setup_charge_ranges({"Fe": [2, 3], "Mn": [2, 3], "Ti": [3, 4], "O": -2})
@@ -301,7 +301,7 @@ suggestions = picip.suggest(
     pred,
     n=5,           # number of suggestions
     min_dist=0.05  # minimum spacing between suggestions in constrained-basis
-                   # coordinates, where 1.0 spans the full phase field
+                   # coordinates
 )
 ```
 
