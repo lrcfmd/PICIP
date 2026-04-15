@@ -14,9 +14,8 @@ pip install picip
 
 ### Verify
 
-```python
-from picip import PICIP, Phase_Field, Sample, make_plotter, Spread
-print('PICIP installed successfully')
+```bash
+python -c "from picip import PICIP, Phase_Field, Sample, make_plotter, Spread; print('PICIP installed successfully')"
 ```
 
 ---
