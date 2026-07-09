@@ -1,34 +1,93 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "picip",
+  "version": "0.1.1",
 
   "parameters": {
-    "elements": {
-      "type": "array",
-      "description": "Elements in the phase field (e.g. [\"Fe\", \"Mn\", \"Ti\"])"
-    },
-    "composition": {
-      "type": "string",
-      "description": "Measured sample composition as a pymatgen formula string (e.g. \"Fe2Mn4Ti4\")"
-    },
-    "knowns": {
-      "type": "array",
-      "description": "Known co-existing phases identified by XRD (list of formula strings)"
-    },
-    "mass_weights": {
-      "type": "array",
-      "description": "Rietveld mass fractions for each known phase (same order as knowns)"
-    },
     "predicted_error": {
       "type": "number",
-      "description": "Uncertainty in mass weights: 0 = precise, 1 = rough. Default 0.3"
+      "description": "Uncertainty in mass weights: 0 = precise, 1 = rough. Default 0.3",
+      "default": 0.3
     },
     "n_suggestions": {
       "type": "integer",
-      "description": "Number of suggested next compositions to return. Default 5"
+      "description": "Number of suggested next compositions to return. Default 5",
+      "default": 5
     }
   },
 
-  "dataset": {
-    "mime_type": "application/json"
+  "execution": {
+    "instance": {
+      "description": "Infer unknown phase composition from measured XRD data via Bayesian inference",
+      "inputs": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Elements in the phase field (e.g. [\"Fe\", \"Mn\", \"Ti\"])",
+          "default": ["Fe", "Mn", "Ti"]
+        },
+        "composition": {
+          "type": "string",
+          "description": "Measured sample composition as a pymatgen formula string (e.g. \"Fe2Mn4Ti4\")",
+          "default": "Fe2Mn4Ti4"
+        },
+        "knowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Known co-existing phases identified by XRD (list of formula strings)",
+          "default": []
+        },
+        "mass_weights": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "description": "Rietveld mass fractions for each known phase (same order as knowns)",
+          "default": []
+        }
+      },
+      "outputs": {
+        "samples_processed": {
+          "type": "integer",
+          "description": "Number of samples processed"
+        },
+        "suggestions": {
+          "type": "integer",
+          "description": "Number of suggested compositions generated"
+        }
+      }
+    },
+    "dataset": {
+      "description": "Batch inference from JSON input file",
+      "inputs": {
+        "file": {
+          "type": "string",
+          "format": "uri",
+          "mime_type": "application/json",
+          "description": "Input JSON file with phase_field and samples configuration"
+        }
+      },
+      "outputs": {
+        "suggestions_csv": {
+          "type": "file",
+          "mime_type": "text/csv",
+          "description": "Suggested compositions CSV"
+        },
+        "prediction_html": {
+          "type": "file",
+          "mime_type": "text/html",
+          "description": "Interactive prediction plot"
+        },
+        "results_zip": {
+          "type": "file",
+          "mime_type": "application/zip",
+          "description": "All output files as a zip archive"
+        }
+      }
+    }
   }
 }
