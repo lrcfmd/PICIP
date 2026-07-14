@@ -1,4 +1,5 @@
-from .picip import PICIP, Sample, Prediction, Suggestions
-from .phase_field import Phase_Field
+from .picip_model import PicipModel
 
-__all__ = ["PICIP", "Sample", "Prediction", "Suggestions", "Phase_Field"]
+# Wire the concrete model for the runner. This is the single tool-owned wiring
+# point — tools replace PicipModel with their own model class.
+handler = PicipModel()

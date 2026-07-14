@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "./model.schema.json",
   "name": "picip",
   "version": "0.1.1",
 
@@ -17,75 +17,88 @@
   },
 
   "execution": {
-    "instance": {
-      "description": "Infer unknown phase composition from measured XRD data via Bayesian inference",
-      "inputs": {
-        "elements": {
-          "type": "array",
-          "items": {
-            "type": "string"
+    "modes": {
+      "instance": {
+        "description": "Infer unknown phase composition from measured XRD data via Bayesian inference. Inputs are provided inline; results are written as suggestion files and a plot.",
+        "response": "deferred",
+        "inputs": {
+          "elements": {
+            "type": "array",
+            "items": { "type": "string" },
+            "required": true,
+            "description": "Elements in the phase field (e.g. [\"Fe\", \"Mn\", \"Ti\"])",
+            "default": ["Fe", "Mn", "Ti"]
           },
-          "description": "Elements in the phase field (e.g. [\"Fe\", \"Mn\", \"Ti\"])",
-          "default": ["Fe", "Mn", "Ti"]
-        },
-        "composition": {
-          "type": "string",
-          "description": "Measured sample composition as a pymatgen formula string (e.g. \"Fe2Mn4Ti4\")",
-          "default": "Fe2Mn4Ti4"
-        },
-        "knowns": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "composition": {
+            "type": "string",
+            "required": true,
+            "description": "Measured sample composition as a pymatgen formula string (e.g. \"Fe2Mn4Ti4\")",
+            "default": "Fe2Mn4Ti4"
           },
-          "description": "Known co-existing phases identified by XRD (list of formula strings)",
-          "default": []
-        },
-        "mass_weights": {
-          "type": "array",
-          "items": {
-            "type": "number"
+          "knowns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "required": false,
+            "description": "Known co-existing phases identified by XRD (list of formula strings)",
+            "default": []
           },
-          "description": "Rietveld mass fractions for each known phase (same order as knowns)",
-          "default": []
+          "mass_weights": {
+            "type": "array",
+            "items": { "type": "number" },
+            "required": false,
+            "description": "Rietveld mass fractions for each known phase (same order as knowns)",
+            "default": []
+          }
+        },
+        "outputs": {
+          "samples_processed": {
+            "type": "integer",
+            "description": "Number of samples processed"
+          },
+          "suggestions": {
+            "type": "integer",
+            "description": "Number of suggested compositions generated"
+          },
+          "suggestions.csv": {
+            "type": "file",
+            "mime_type": "text/csv",
+            "description": "Suggested compositions CSV"
+          },
+          "prediction.html": {
+            "type": "file",
+            "mime_type": "text/html",
+            "description": "Interactive prediction plot"
+          }
         }
       },
-      "outputs": {
-        "samples_processed": {
-          "type": "integer",
-          "description": "Number of samples processed"
+
+      "dataset": {
+        "description": "Batch inference from a JSON input file describing the phase field and one or more samples.",
+        "response": "deferred",
+        "inputs": {
+          "file": {
+            "type": "file",
+            "mime_type": "application/json",
+            "required": true,
+            "description": "Input JSON file with phase_field and samples configuration (see input_schema.json for the structure)"
+          }
         },
-        "suggestions": {
-          "type": "integer",
-          "description": "Number of suggested compositions generated"
-        }
-      }
-    },
-    "dataset": {
-      "description": "Batch inference from JSON input file",
-      "inputs": {
-        "file": {
-          "type": "string",
-          "format": "uri",
-          "mime_type": "application/json",
-          "description": "Input JSON file with phase_field and samples configuration"
-        }
-      },
-      "outputs": {
-        "suggestions_csv": {
-          "type": "file",
-          "mime_type": "text/csv",
-          "description": "Suggested compositions CSV"
-        },
-        "prediction_html": {
-          "type": "file",
-          "mime_type": "text/html",
-          "description": "Interactive prediction plot"
-        },
-        "results_zip": {
-          "type": "file",
-          "mime_type": "application/zip",
-          "description": "All output files as a zip archive"
+        "outputs": {
+          "suggestions.csv": {
+            "type": "file",
+            "mime_type": "text/csv",
+            "description": "Suggested compositions CSV"
+          },
+          "prediction.html": {
+            "type": "file",
+            "mime_type": "text/html",
+            "description": "Interactive prediction plot"
+          },
+          "results.zip": {
+            "type": "file",
+            "mime_type": "application/zip",
+            "description": "All output files as a zip archive"
+          }
         }
       }
     }

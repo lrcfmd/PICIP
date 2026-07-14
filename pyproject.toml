@@ -11,12 +11,14 @@ dependencies = [
     "plotly",
     "pandas",
     "matplotlib",
-    "boto>=2.49.0",
     "boto3>=1.42.87",
+    "structlog>=25.5.0",
+    "jsonschema>=4.26.0",
 ]
 
 [project.scripts]
-model-run = "app.entrypoint:main"
+model-run = "cmds.run:run_cli"
+validate-model = "cmds.validate_model:main"
 
 [tool.uv]
 package = true
