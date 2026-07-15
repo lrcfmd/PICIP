@@ -20,7 +20,7 @@
     "modes": {
       "instance": {
         "description": "Infer unknown phase composition from measured XRD data via Bayesian inference. Inputs are provided inline; results are written as suggestion files and a plot.",
-        "response": "deferred",
+        "response": "immediate",
         "inputs": {
           "elements": {
             "type": "array",
