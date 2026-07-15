@@ -3,7 +3,7 @@ name = "picip"
 version = "0.1.0"
 description = "Probabilistic Isolation of Inorganic Crystalline Phases"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "scipy",
