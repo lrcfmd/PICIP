@@ -1,7 +1,5 @@
 {
   "$schema": "./model.schema.json",
-  "name": "picip",
-  "version": "0.1.1",
 
   "parameters": {
     "predicted_error": {
