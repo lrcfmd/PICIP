@@ -294,9 +294,13 @@ class Spread:
         adjusted_points  = []
         precursor_amounts = []
 
-        for p in result.points:
+        outside_hull = []
+        hull_tol = 1e-6
+        for i, p in enumerate(result.points):
             p_ext = np.insert(p, 0, 1)
-            x, _  = nnls(A, p_ext, maxiter=60000)
+            x, residual = nnls(A, p_ext, maxiter=60000)
+            if residual > hull_tol:
+                outside_hull.append((i, float(residual)))
 
             # Convert NNLS atom-fraction weights to formula-unit amounts.
             # x[i] is proportional to the number of atoms from precursor i,
@@ -321,14 +325,28 @@ class Spread:
         precursor_amounts = np.array(precursor_amounts)
         labels = pf.get_composition_strings(pf.precursors_standard, out="txt")
 
+        if outside_hull:
+            n_out = len(outside_hull)
+            worst = max(outside_hull, key=lambda r: r[1])
+            print(
+                f"WARNING: {n_out}/{len(result.points)} suggested composition(s) "
+                f"lie outside the convex hull of the precursors and have been "
+                f"projected onto the nearest hull face — the reconstructed "
+                f"composition will not match the original suggestion exactly.\n"
+                f"  worst residual: index {worst[0]}, ||A x - p|| = {worst[1]:.3e}.\n"
+                f"  Consider adding precursors that span the suggested region."
+            )
+
         return SpreadResultWithPrecursors(
             adjusted_points, pf, precursor_amounts, labels
         )
 
-    def evaluate_spread(self, result):
+    def evaluate_spread(self, result, show=False, save=None):
         """Plot per-site coverage and separation diagnostics for a result.
 
-        Produces a matplotlib figure with two overlaid histograms:
+        Returns a matplotlib figure with two overlaid histograms.  Nothing is
+        displayed or written unless you ask for it — pass ``show=True`` to open
+        the figure in an image viewer, or ``save=<path>`` to write a PNG.
 
         * **Worst coverage distance (dwcd, blue)** — for each suggested site,
           the distance to the furthest omega point in its Voronoi cell.  A
@@ -345,6 +363,16 @@ class Spread:
         ----------
         result : SpreadResult
             Output from ``run()``.
+        show : bool, default False
+            Open the figure in the system image viewer.  Off by default so that
+            batch runs and test suites do not spawn viewer windows.
+        save : str, optional
+            Path to write the figure to as a PNG.
+
+        Returns
+        -------
+        matplotlib.figure.Figure
+            The figure, so callers can save or embed it themselves.
         """
         import matplotlib
         matplotlib.use('Agg')
@@ -414,7 +442,7 @@ class Spread:
 
         ref_corner = corner_dict[ref_name] if ref_name in corner_dict else None
 
-        plt.figure(figsize=(10, 6))
+        fig = plt.figure(figsize=(10, 6))
         plt.bar(bcenters, c1 / max_count, width=bw, alpha=0.5,
                 color='blue', label='Worst coverage distance', align='edge')
         plt.bar(bcenters, c2 / max_count, width=bw, alpha=0.5,
@@ -476,11 +504,19 @@ class Spread:
         plt.ylim(bottom=-0.4)
         plt.xlim(left=0, right=ref_dist)
         plt.tight_layout()
-        import subprocess, tempfile
-        tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-        plt.savefig(tmp.name, dpi=150, bbox_inches='tight')
-        plt.close()
-        subprocess.Popen(['xdg-open', tmp.name])
+
+        if save is not None:
+            fig.savefig(save, dpi=150, bbox_inches='tight')
+        if show:
+            # The backend is forced to Agg above, so there is no interactive
+            # window to raise — hand a rendered PNG to the system viewer.
+            import subprocess
+            import tempfile
+            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            fig.savefig(tmp.name, dpi=150, bbox_inches='tight')
+            subprocess.Popen(['xdg-open', tmp.name])
+        plt.close(fig)
+        return fig
 
     # ── Internal ─────────────────────────────────────────────────────────────
 

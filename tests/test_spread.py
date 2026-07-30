@@ -370,36 +370,21 @@ class TestSimplifyToPrecursors:
 
 class TestEvaluateSpread:
 
-    def test_does_not_raise_uncharged(self, monkeypatch):
-        """evaluate_spread should run without error (block display)."""
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        monkeypatch.setattr(plt, 'show', lambda: None)
-
+    def test_does_not_raise_uncharged(self):
+        """evaluate_spread returns a figure and displays nothing by default."""
         pf = _uncharged_2d()
         s = Spread(pf)
         result = s.run(n=5, **FAST)
-        s.evaluate_spread(result)   # should not raise
+        assert s.evaluate_spread(result) is not None
 
-    def test_does_not_raise_charged(self, monkeypatch):
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        monkeypatch.setattr(plt, 'show', lambda: None)
-
+    def test_does_not_raise_charged(self):
         pf = _charged_2d()
         s = Spread(pf)
         result = s.run(n=5, **FAST)
-        s.evaluate_spread(result)
+        assert s.evaluate_spread(result) is not None
 
-    def test_does_not_raise_spinel(self, monkeypatch):
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        monkeypatch.setattr(plt, 'show', lambda: None)
-
+    def test_does_not_raise_spinel(self):
         pf = _custom_spinel()
         s = Spread(pf)
         result = s.run(n=4, **FAST)
-        s.evaluate_spread(result)
+        assert s.evaluate_spread(result) is not None

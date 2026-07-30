@@ -224,7 +224,9 @@ class Phase_Field:
         """
 
         #check if charges are provided
-        if isinstance(species, dict): 
+        has_ranges=False
+        charge_vector=None
+        if isinstance(species, dict):
             has_ranges=False
             for value in species.values():
                 if isinstance(value, list):
@@ -257,6 +259,15 @@ class Phase_Field:
             normal_vectors = np.vstack((custom_con, normalb))
         else:
             raise Exception('species must be either list or dict')
+
+        # Record the constraints by meaning as well as by position (see _setup).
+        # charge_vector is set only for a dict of scalar charges; charge-range
+        # fields are validated against charge_min/charge_max instead.
+        self.charge_vector = (
+            None if charge_vector is None else np.array(charge_vector, dtype=float)
+        )
+        custom_con = np.atleast_2d(np.asarray(custom_con, dtype=float))
+        self.custom_constraints = custom_con if custom_con.size else None
 
         if precursors is not None:
             self.add_precursors_standard(precursors)
@@ -300,6 +311,11 @@ class Phase_Field:
             normal_vectors = np.vstack((normala, normalb))
         else:
             normal_vectors = np.array([normalb])
+        # Record the constraints by meaning as well as by position.  Rows are
+        # prepended to normal_vectors later (precursor dimension reduction), so
+        # the charge vector cannot be recovered by index after setup.
+        self.charge_vector = None if charge_vector is None else np.array(charge_vector, dtype=float)
+        self.custom_constraints = None
         self.normal_vectors = normal_vectors
         self.normal_vectors_b=np.zeros(len(self.normal_vectors))
         self.resolution = None if n_points is not None else resolution
@@ -571,6 +587,12 @@ class Phase_Field:
             for i in range(additional_constraints_needed)[::-1]:
                 b=np.dot(self.convert_to_standard_basis(self.omega[0]),self.normal_vectors[i])
                 self.normal_vectors_b=np.append([b],self.normal_vectors_b)
+            # Keep the reduced-subspace constraints together with their
+            # right-hand sides, which are generally non-zero.
+            self.subspace_constraints = (
+                np.array(self.normal_vectors[:additional_constraints_needed]),
+                np.array(self.normal_vectors_b[:additional_constraints_needed]),
+            )
 
         if hasattr(self,'charge_ranges') and self.charge_ranges:
             self.set_charge_extreme_constraints()
@@ -594,7 +616,7 @@ class Phase_Field:
         """Compute and store the extreme-charge half-plane constraints for a charge-range field, then filter omega."""
         #this function finds the two hyperplanes corresponding to max and min charges
         has_range = [isinstance(x, list) for x in self.species_dict.values()]
-        if np.all(not has_range):
+        if not any(has_range):
             raise Exception(
                 'Error, to get charge extremes at least one species must have '
                 + 'a range of charges')
@@ -605,9 +627,9 @@ class Phase_Field:
             x if not y else 0
             for x, y in zip(self.species_dict.values(), has_range)
         ]
-        self.charge_max = np.array(fixed)
+        self.charge_max = np.array(fixed, dtype=float)
         self.charge_max[has_range] = np.array(ranges)[:, 1]
-        self.charge_min = np.array(fixed)
+        self.charge_min = np.array(fixed, dtype=float)
         self.charge_min[has_range] = np.array(ranges)[:, 0]
         self.constrain_charge_omega(charge_scalar)
         constraints = []
@@ -842,17 +864,13 @@ class Phase_Field:
         knowns_label = []
         for k in knowns:
             ks = [k.get_atomic_fraction(e) for e in self.elements]
-            if self.normal_vectors.shape[0] > 1:
-                if abs(np.dot(ks, self.normal_vectors[0])) > tol:
-                    res = np.dot(ks, self.normal_vectors[0])
-                    name = self.get_composition_strings(ks, out="txt")
-                    print(f"Ignoring unbalanced known: {name} ({res}>{tol})")
-                else:
-                    knowns_standard.append(ks)
-                    knowns_label.append(k.reduced_formula)
-            else:
-                knowns_standard.append(ks)
-                knowns_label.append(k.reduced_formula)
+            failures = self.constraint_failures(ks, tol=tol)
+            if failures:
+                # Warn but keep it: dropping the phase silently left callers
+                # (e.g. Spread.add_known_phases) with fewer knowns than they added.
+                print(f"Warning, known {k.reduced_formula} " + "; ".join(failures))
+            knowns_standard.append(ks)
+            knowns_label.append(k.reduced_formula)
 
         if knowns_standard:
             knowns_constrained = self.convert_to_constrained_basis(
@@ -895,14 +913,10 @@ class Phase_Field:
         knowns_label = []
         for k in knowns_standard:
             kn = np.array(k) / sum(k)
-            if self.normal_vectors.shape[0] > 1:
-                if abs(np.dot(kn, self.normal_vectors[0])) > 0.05:
-                    print(k)
-                    print(np.dot(kn, self.normal_vectors[0]))
-                    print(
-                        "Ignoring unbalanced known: ",
-                        self.get_composition_strings(k, out="txt"),
-                    )
+            failures = self.constraint_failures(kn, tol=0.05)
+            if failures:
+                name = self.get_composition_strings(k, out="txt")
+                print(f"Warning, known {name} " + "; ".join(failures))
             rep = ""
             for i, j in zip(self.elements, k):
                 if j != 0:
@@ -1130,35 +1144,117 @@ class Phase_Field:
         s = [c.get_atomic_fraction(el) for el in self.elements]
         return s
 
-    def check_neutrality(self, points, show=False):
+    def constraint_failures(self, point, tol=0.01):
         """
-        Checks if the points are charge neutral.
+        Describe which of the phase field's constraints a composition violates.
+
+        Parameters
+        ----------
+        point : array_like of shape (nelements,)
+            A composition in standard (element-fraction) representation.
+        tol : float, optional, default=0.01
+            Absolute tolerance on each equality-constraint residual.
+
+        Returns
+        -------
+        list of str
+            One message per violated constraint; empty if the composition is valid.
+        """
+        x = np.asarray(point, dtype=float)
+        failures = []
+
+        # Charge neutrality — fixed-charge fields only.  Charge-range fields
+        # have no equality constraint and are checked against their bounds below.
+        if getattr(self, 'charge_vector', None) is not None:
+            res = float(np.dot(self.charge_vector, x))
+            if abs(res) > tol:
+                failures.append(f"not charge balanced (residual {res:.3g})")
+
+        # Mixed-valence fields: neutrality must be reachable somewhere between
+        # the lowest and highest total charge the allowed oxidation states give.
+        if getattr(self, 'charge_ranges', False) and hasattr(self, 'charge_min'):
+            lo = float(np.dot(self.charge_min, x))
+            hi = float(np.dot(self.charge_max, x))
+            if lo > tol or hi < -tol:
+                failures.append(
+                    f"cannot be charge balanced by any allowed oxidation state "
+                    f"(total charge spans {lo:.3g} to {hi:.3g})"
+                )
+
+        if getattr(self, 'custom_constraints', None) is not None:
+            for j, c in enumerate(self.custom_constraints):
+                res = float(np.dot(c, x))
+                if abs(res) > tol:
+                    failures.append(f"violates custom constraint {j} (residual {res:.3g})")
+
+        # Precursors that reduce the dimension confine the field to a subspace
+        # whose constraints have non-zero right-hand sides.
+        if getattr(self, 'subspace_constraints', None) is not None:
+            vectors, bs = self.subspace_constraints
+            for v, b in zip(vectors, bs):
+                res = float(np.dot(v, x) - b)
+                if abs(res) > tol:
+                    failures.append(
+                        f"lies outside the precursor-reduced subspace (residual {res:.3g})"
+                    )
+
+        return failures
+
+    def check_composition(self, points, tol=0.01, verbose=True):
+        """
+        Check that compositions satisfy the constraints defining this phase field.
+
+        Checks charge neutrality (fixed-charge fields), reachable charge range
+        (mixed-valence fields), any custom equality constraints, and the reduced
+        subspace imposed by dimension-reducing precursors.  Whichever of these
+        do not apply are skipped.  The sum-to-one constraint is not checked,
+        since compositions are normalised on input.
 
         Parameters
         ----------
         points : array_like or ndarray of shape (n,) or (m, n)
-            Points to check for neutrality.
-        show : bool, optional, default=False
-            Whether or not to print the neutrality check results.
+            Compositions in standard (element-fraction) representation.
+        tol : float, optional, default=0.01
+            Absolute tolerance on each equality-constraint residual.
+        verbose : bool, optional, default=True
+            Print a message naming each violated constraint.
 
         Returns
         -------
-        None
+        bool
+            True if every point satisfies every applicable constraint.
         """
-        if self.normal_vectors.shape[0] == 1:
-            return True  # no charge constraint — uncharged field, nothing to check
-        points = np.array(points)
-        if points.ndim == 1:
-            points = [points]
-        for i in points:
-            res = np.dot(self.normal_vectors[0], i)
-            if abs(res) > 0.01:
-                print(f"Error, point {i} is not balanced. ({res})")
-                return False
-            else:
-                if show:
-                    print(res)
-        return True
+        points = np.atleast_2d(np.asarray(points, dtype=float))
+        ok = True
+        for x in points:
+            failures = self.constraint_failures(x, tol=tol)
+            if failures:
+                ok = False
+                if verbose:
+                    name = self.get_composition_strings(x, out="txt")
+                    print(f"Invalid composition {name}: " + "; ".join(failures))
+        return ok
+
+    def check_neutrality(self, points, show=False):
+        """
+        Check compositions against the phase field's constraints.
+
+        Retained for backwards compatibility; :meth:`check_composition` is the
+        current name and checks every constraint, not only charge neutrality.
+
+        Parameters
+        ----------
+        points : array_like or ndarray of shape (n,) or (m, n)
+            Compositions in standard representation.
+        show : bool, optional, default=False
+            Unused; kept for API backwards compatibility.
+
+        Returns
+        -------
+        bool
+            True if every point satisfies every applicable constraint.
+        """
+        return self.check_composition(points)
 
 
 
@@ -1322,8 +1418,10 @@ class Phase_Field:
         ndarray of shape (N, constrained_dim)
             The newly built grid in the constrained basis.
         """
+        if self.charge_vector is None:
+            raise Exception("create_new_omega requires a fixed-charge phase field")
         species_dic={}
-        for el,c in zip(self.elements,self.normal_vectors[0]):
+        for el,c in zip(self.elements,self.charge_vector):
             species_dic[el]=c
         temp_field=Phase_Field()
         temp_field.setup_charged(species_dic,resolution=resolution,basis=self.basis)

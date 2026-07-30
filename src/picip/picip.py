@@ -38,12 +38,15 @@ Four-step workflow
        pl.plot_prediction_results(pred)
        pl.show()
 """
+import warnings
+
 import numpy as np
 import scipy.stats
 from scipy.stats import dirichlet, multivariate_normal
 from scipy.interpolate import griddata
 from pymatgen.core import Composition
 import pandas as pd
+from picip.exceptions import ZeroPException
 
 
 def _requires_samples(method):
@@ -150,7 +153,14 @@ class Sample:
         Number of interpolation points per ray used in the last run.
         Set by PICIP._compute_p_dirichlet().
     _n_rays : int or None
-        Number of rays used in the last run.
+        Number of discretised known-simplex points used in the last run.
+        Set by PICIP._compute_p_dirichlet().
+    _n_rays_emitted : int or None
+        Number of projection rays actually fired, which is <= _n_rays once
+        degenerate rays are skipped, and larger than it on the 2-D path where
+        extra corner-derived rays are added.  The first
+        ``_n_rays_emitted * _n_p`` entries of _projected_points are the ray
+        block, laid out ray-major; anything after that is anchor points.
         Set by PICIP._compute_p_dirichlet().
     """
 
@@ -172,6 +182,7 @@ class Sample:
         self._projected_p = None
         self._n_p = None
         self._n_rays = None
+        self._n_rays_emitted = None
 
     def add_knowns(self, knowns):
         """
@@ -263,6 +274,7 @@ class Sample:
         if predicted_error <= 0:
             raise ValueError(f"predicted_error must be positive, got {predicted_error}.")
         self.predicted_error = predicted_error
+        self.prior = prior
 
     
 
@@ -320,6 +332,26 @@ class Suggestions:
         self.labels      = labels
         self.elements    = phase_field.elements
 
+    def print_table(self, prec=3):
+        """
+        Print the suggested compositions as an aligned table.
+
+        One row per suggestion: its label ('mean' or 'sampled') followed by the
+        element fractions, using whichever elements the phase field was built
+        from.
+
+        Parameters
+        ----------
+        prec : int, optional, default=3
+            Decimal places shown for each element fraction.
+        """
+        width = max((len(label) for label in self.labels), default=0)
+        for label, row in zip(self.labels, self.standard):
+            fractions = "  ".join(
+                f"{el}={v:.{prec}f}" for el, v in zip(self.elements, row)
+            )
+            print(f"  {label:{width}s}  {fractions}")
+
     def save(self, path):
         """Save suggestions to a CSV file with elemental fraction columns."""
         df = pd.DataFrame(self.standard, columns=self.elements)
@@ -363,6 +395,25 @@ class PICIP:
         self.projected_simplex = None
         self.projected_simplex_p = None
 
+    def _warn_if_outside_field(self, comp_standard, label):
+        """
+        Warn if a standard-basis composition violates the phase field's constraints.
+
+        Parameters
+        ----------
+        comp_standard : ndarray of shape (nelements,)
+            Composition in standard (element-fraction) representation.
+        label : str
+            How to name the composition in the warning, e.g. ``"sample s1"``.
+        """
+        failures = self.phase_field.constraint_failures(comp_standard)
+        if failures:
+            print(
+                f"Warning, {label} " + "; ".join(failures)
+                + " — it will be projected onto the phase field, so the result "
+                  "will describe a slightly different composition."
+            )
+
     def add_sample(self, sample):
         """
         Validate a Sample and register it for inference.
@@ -370,6 +421,14 @@ class PICIP:
         Converts the sample composition and all known phases into both the
         constrained and standard bases, computes the weight-averaged known
         position (average_k), and appends the sample to self.samples.
+
+        The sample composition and every known are checked against the phase
+        field's constraints (charge neutrality, charge ranges, custom
+        constraints) *before* conversion, since converting to the constrained
+        basis projects any violation away.  A violation is reported as a
+        warning, not an exception — measured compositions often sit slightly
+        off the constraint surface — but the inference then describes the
+        projected composition rather than the one supplied.
 
         Parameters
         ----------
@@ -383,14 +442,37 @@ class PICIP:
             If the sample or any known phase contains elements outside the phase
             field, or if predicted_error has not been set on the sample.
         """
-        if set([x.symbol for x in sample.composition.elements]) > set(self.phase_field.elements):
-            raise Exception(f"Sample {sample.name} contains elements not in phase field")
+        if sample.knowns is None:
+            raise Exception(f"Sample {sample.name} has no knowns — call add_knowns() first")
+        if sample.weights is None:
+            raise Exception(
+                f"Sample {sample.name} has no weights — call add_mass_weights() "
+                "or add_molar_weights() first"
+            )
+        field_elements = set(self.phase_field.elements)
+        # Set difference, not '>': a strict-superset test only fires when the
+        # sample happens to mention every element in the field as well.
+        extra = set([x.symbol for x in sample.composition.elements]) - field_elements
+        if extra:
+            raise Exception(
+                f"Sample {sample.name} contains elements not in phase field: {sorted(extra)}"
+            )
         comp_standard=np.array([sample.composition.get_atomic_fraction(el) for el in self.phase_field.elements])
+        # Check in the standard basis, before converting.  The constrained basis
+        # spans only the subspace satisfying the constraints, so converting
+        # projects any violation away — this is the last point at which a
+        # composition outside the phase field can still be detected.
+        self._warn_if_outside_field(comp_standard, f"sample {sample.name}")
         sample.comp_constrained=self.phase_field.convert_to_constrained_basis(comp_standard)
         for k in sample.knowns:
-            if set([x.symbol for x in k.elements]) > set(self.phase_field.elements):
-                raise Exception(f"Known phase {k} contains elements not in phase field")
+            extra = set([x.symbol for x in k.elements]) - field_elements
+            if extra:
+                raise Exception(
+                    f"Known phase {k} contains elements not in phase field: {sorted(extra)}"
+                )
         sample.knowns_standard=np.array([[k.get_atomic_fraction(el) for el in self.phase_field.elements] for k in sample.knowns])
+        for k, k_s in zip(sample.knowns, sample.knowns_standard):
+            self._warn_if_outside_field(k_s, f"known {k.reduced_formula}")
 
         sample.knowns_constrained=self.phase_field.convert_to_constrained_basis(sample.knowns_standard)
         sample.average_k=np.sum(sample.weights[:,np.newaxis]*sample.knowns_constrained, axis=0)
@@ -400,7 +482,7 @@ class PICIP:
         self.samples.append(sample)
                                 
     @_requires_samples
-    def run(self, sample_indexes=None, version='b', n_l=50, n_p=50, name=None):
+    def run(self, sample_indexes=None, version='gaussian', n_l=50, n_p=50, name=None):
         """
         Run PICIP inference and return a Prediction.
 
@@ -418,11 +500,16 @@ class PICIP:
             samples.  An integer selects a single sample by index.  A slice
             selects a subset.
         version : str, optional
-            Inference method.  ``'b'`` (default) uses the Dirichlet simplex
-            method, dispatching on the number of known phases (1 known →
-            Gaussian automatically).  ``'gaussian'`` forces the Gaussian
-            hemisphere method regardless of the number of knowns — equivalent
-            to the original PICIP algorithm from the paper.
+            Inference method.  ``'gaussian'`` (default) is the original PICIP
+            algorithm from the paper — the well-tested path, valid for any
+            number of knowns in any dimension.
+
+            ``'dirichlet'`` opts into the Dirichlet simplex method, which is
+            implemented for exactly two configurations: 2-D with 2 known
+            phases, and 3-D with 3 known phases.  Requesting it anywhere else
+            emits a ``RuntimeWarning`` and falls back to Gaussian.  The warning
+            only appears when ``'dirichlet'`` was asked for explicitly — the
+            default never warns, since Gaussian is valid everywhere.
         n_l : int, optional
             Resolution of the known simplex discretisation: number of ray
             directions per sample.  Higher values give a smoother simplex PDF
@@ -460,25 +547,19 @@ class PICIP:
             if name is None:
                 name=samples[0].name if len(samples)==1 else 'combined probability'
 
-        if version not in ('b', 'gaussian'):
-            raise ValueError(f"Unknown version '{version}'. Use 'b' (Dirichlet) or 'gaussian'.")
+        if version not in ('dirichlet', 'gaussian'):
+            raise ValueError(f"Unknown version '{version}'. Use 'dirichlet' or 'gaussian'.")
 
-        if version=='b':
-            p_densities=[]
-            for sample in samples:
-                p_densities.append(self._compute_p_dirichlet(sample, n_l, n_p))
-            if len(samples)==1:
-                prob_density=p_densities[0]
-            else:
-                prob_density=np.prod(np.array(p_densities),axis=0)
-        elif version=='gaussian':
-            p_densities=[]
-            for sample in samples:
-                p_densities.append(self._compute_p_gaussian(sample, n_l, n_p))
-            if len(samples)==1:
-                prob_density=p_densities[0]
-            else:
-                prob_density=np.prod(np.array(p_densities),axis=0)
+        # Pick the density function once, so every later recomputation (the
+        # zero-density retry below) stays on the method the caller asked for.
+        compute = (self._compute_p_dirichlet if version == 'dirichlet'
+                   else self._compute_p_gaussian)
+
+        p_densities = [compute(sample, n_l, n_p) for sample in samples]
+        if len(samples)==1:
+            prob_density=p_densities[0]
+        else:
+            prob_density=np.prod(np.array(p_densities),axis=0)
 
         if np.any(np.isnan(prob_density)):
             raise ValueError(
@@ -501,7 +582,7 @@ class PICIP:
                     )
                     for s in samples:
                         s.predicted_error = s.predicted_error * scale
-                    p_densities = [self._compute_p_dirichlet(s, n_l, n_p) for s in samples]
+                    p_densities = [compute(s, n_l, n_p) for s in samples]
                     prob_density = np.prod(np.array(p_densities), axis=0)
                     if prob_density.sum() > 0:
                         print(
@@ -610,74 +691,166 @@ class PICIP:
         prediction.suggestions = suggestions
         return suggestions
 
+    def suggest_kmedoids(self, prediction, n, past_samples=None,
+                         exclude_radius=None, max_candidates=1000):
+        """
+        Bayes-optimal batch for the metric  E_p[ min_i ||c_i - x*|| ].
+
+        Greedy weighted k-medoids over the omega grid: at each step pick the
+        omega point that minimises the posterior-weighted expected distance
+        to the *closest* already-chosen point.  Equivalent to greedy facility
+        location with the posterior as customer weights — a 2-approximation
+        to the optimal batch under this objective.
+
+        Parameters
+        ----------
+        prediction : Prediction
+        n : int
+            Batch size.
+        past_samples : list of ndarray or None
+            Past sample compositions (constrained basis) treated as already-
+            chosen — the batch is selected to *complement* them.  If None,
+            uses the input samples on the prediction.
+        exclude_radius : float or None
+            If set, omega points within this radius of any past sample are
+            removed from candidacy (not just from the cost function).
+        max_candidates : int, optional
+            Restrict the candidate pool to the top-``max_candidates`` omega
+            points by posterior probability.  The optimal medoid sits in a
+            high-probability region, so this is a near-lossless speedup for
+            large omega grids.  Set to ``None`` to disable.
+        """
+        from scipy.spatial.distance import cdist
+        if n < 1:
+            raise ValueError(f"n must be at least 1, got {n}.")
+        p     = prediction.prob_density.astype(float).copy()
+        s     = p.sum()
+        if s <= 0:
+            raise ZeroPException()
+        p    /= s
+        omega = self.phase_field.omega                              # (N, dim)
+        N     = len(omega)
+
+        if past_samples is None:
+            past = [s.comp_constrained for s in prediction.samples]
+        else:
+            past = [np.asarray(x) for x in past_samples]
+
+        # Candidate pool: top-K omega points by posterior probability.
+        if max_candidates is not None and max_candidates < N:
+            cand_indices = np.argpartition(-p, max_candidates)[:max_candidates]
+        else:
+            cand_indices = np.arange(N)
+
+        # Optional radius exclusion against past samples
+        if exclude_radius is not None and past:
+            d_past = cdist(omega[cand_indices], np.array(past)).min(axis=1)
+            cand_indices = cand_indices[d_past >= exclude_radius]
+
+        # Distance from every omega point to its nearest past sample
+        if past:
+            d_prev = cdist(omega, np.array(past)).min(axis=1)
+        else:
+            d_prev = np.full(N, np.inf)
+
+        # Distances candidate→all-omega: a single (K, N) matrix reused each step.
+        D_cand_omega = cdist(omega[cand_indices], omega)            # (K, N)
+        cand_alive = np.ones(len(cand_indices), dtype=bool)
+
+        chosen_idx = []
+        for _ in range(n):
+            alive = np.where(cand_alive)[0]
+            if len(alive) == 0:
+                break
+            # Cost(c) = Σ_x p(x) · min(d_prev(x), D[c, x])
+            new_min = np.minimum(d_prev[None, :], D_cand_omega[alive])
+            cost = new_min @ p
+            best_local = alive[int(np.argmin(cost))]
+            best = int(cand_indices[best_local])
+            chosen_idx.append(best)
+            cand_alive[best_local] = False
+            d_prev = np.minimum(d_prev, D_cand_omega[best_local])
+
+        labels = ['kmedoid'] * len(chosen_idx)
+        suggestions = Suggestions(omega[chosen_idx], self.phase_field, labels)
+        prediction.suggestions = suggestions
+        return suggestions
+
     def _compute_p_dirichlet(self, sample, n_l, n_p, floor=1e-6):
         """
-        Compute the probability density for one sample using the Dirichlet method.
+        Compute the probability density for one sample.
 
-        Dispatches on the number of known phases:
+        Dispatch:
 
-        * 1 known  → :meth:`_compute_p_gaussian` (Fibonacci demisphere, Gaussian
-          weighting by perpendicular distance to the single known).
-        * 2 knowns → :meth:`_discretise_known_simplex_2d` + :meth:`_map_to_ab_line`
-          to get barycentric coordinates along the known line segment.
-        * 3 knowns → :meth:`_discretise_known_simplex_3d` (vectorised
-          Möller-Trumbore) to sample the full triangular known simplex.
-        * >3 knowns → raises ``Exception`` (not implemented).
+        * 2-D constrained space with exactly 2 knowns → Dirichlet line method
+          (:meth:`_discretise_known_simplex_2d` + :meth:`_map_to_ab_line`
+          + :meth:`_project_known_simplex`).
+        * 3-D constrained space with exactly 3 knowns → Dirichlet triangle
+          method (:meth:`_compute_p_dirichlet_3d`) — the same geometry one
+          dimension up.
+        * Every other combination of dimension and known count → emits a
+          ``RuntimeWarning`` that the Dirichlet method is untested there, and
+          falls back to :meth:`_compute_p_gaussian` (Fibonacci demisphere of
+          rays from the sample, Gaussian-weighted by perpendicular distance to
+          the centroid of the knowns).
 
-        After computing the Dirichlet likelihood on the known simplex, the
-        simplex PDF is projected onto the omega grid via
-        :meth:`_project_known_simplex`.  Intermediate data are stored on the
-        sample object for use by the detail-view visualiser.
+        The Gaussian fallback uses ``sample.average_k`` (the molar-weighted
+        centroid of the known compositions) as the single effective known —
+        valid for any m and any dim, at the cost of treating the known
+        simplex as a point.  Pass ``version='gaussian'`` to ``run`` to select it
+        deliberately, without the warning.
 
         Parameters
         ----------
         sample : Sample
             Must have been registered with add_sample().
         n_l : int
-            Simplex discretisation resolution (number of ray directions).
+            Number of ray directions.
         n_p : int
             Points per projection ray.
         floor : float, optional
-            Minimum value used to avoid zero-valued Dirichlet parameters.
-            Increase slightly if you see Dirichlet PDF underflow.  Default 1e-6.
+            Minimum value used to avoid zero-valued Dirichlet parameters in
+            the 2-D / 2-knowns path.  Default 1e-6.
 
         Returns
         -------
         ndarray, shape (N,)
             Normalised probability density over omega.
-
-        Raises
-        ------
-        Exception
-            If >3 knowns are present, or if the Dirichlet PDF produces inf/nan.
         """
         weights=sample.weights
         k_c=sample.knowns_constrained
         s=sample.comp_constrained
         mass_weights=sample.mass_weights
         predicted_error=sample.predicted_error
-        # Dispatch: single known → Gaussian, 2/3 knowns → Dirichlet
-        if len(k_c) == 1:
+
+        dim = self.phase_field.constrained_dim
+        m   = len(k_c)
+
+        # Dispatch:
+        #   2-D + exactly 2 knowns  → Dirichlet over the k1–k2 line segment.
+        #   3-D + exactly 3 knowns  → Dirichlet over the k1–k2–k3 triangle
+        #                            (Möller-Trumbore discretisation): the same
+        #                            geometry one dimension up.
+        #   everything else         → Gaussian fallback (perpendicular-distance
+        #                            kernel from the sample to the known
+        #                            centroid; well-defined for any m, any dim).
+        if dim == 3 and m == 3:
+            return self._compute_p_dirichlet_3d(sample, n_l, n_p, floor=floor)
+        if not (dim == 2 and m == 2):
+            warnings.warn(
+                f"The Dirichlet method (version='dirichlet') is implemented only for "
+                f"2-D with 2 known phases and 3-D with 3 known phases. Sample "
+                f"{sample.name!r} is {dim}-D with {m} known phase"
+                f"{'' if m == 1 else 's'}, which is untested — falling back to "
+                f"the Gaussian method. Pass version='gaussian' to select it "
+                f"explicitly and silence this warning.",
+                RuntimeWarning, stacklevel=3)
             return self._compute_p_gaussian(sample, n_l, n_p)
 
-        # Discretize the known simplex
-        dim = self.phase_field.constrained_dim
-        if len(k_c) == 2:
-            # Angle-sweep along k1-k2 segment; dimension-agnostic
-            line_points = self._discretise_known_simplex_2d(k_c[0], k_c[1], s, n_l)
-            normalised_points = np.array(
-                [self._map_to_ab_line(point, k_c[0], k_c[1]) for point in line_points])
-        elif len(k_c) == 3:
-            if dim == 3:
-                # Möller-Trumbore solid-angle sweep (requires np.cross, 3D only)
-                line_points, normalised_points = self._discretise_known_simplex_3d(
-                    k_c[0], k_c[1], k_c[2], s, n_l)
-            else:
-                # Uniform barycentric grid for 2D constrained space
-                line_points, normalised_points = self._discretise_triangle_2d(
-                    k_c[0], k_c[1], k_c[2], s, n_l)
-        else:
-            raise Exception("Method not implemented for > 3 knowns")
+        # m == 2, dim == 2: existing Dirichlet line method
+        line_points = self._discretise_known_simplex_2d(k_c[0], k_c[1], s, n_l)
+        normalised_points = np.array(
+            [self._map_to_ab_line(point, k_c[0], k_c[1]) for point in line_points])
 
         # Get the probability density function (PDF) of the Dirichlet distribution
         alpha=weights/sample.predicted_error
@@ -701,13 +874,147 @@ class PICIP:
         sample._simplex_pdf    = known_pdf
         sample._n_p            = n_p
 
-        p_grid = self._project_known_simplex(known_simplex, known_pdf, s, n_p)
+        # Add phase-field corners explicitly so the interpolation hull covers
+        # the diagram.  For each corner C, intersect the line through (s, C)
+        # with the k1-k2 segment.  If the back-extension lands on the segment
+        # (u in [0, 1]), the corner is reachable by a projection ray from a
+        # virtual c on the segment — extend known_simplex/known_pdf with that
+        # (c, pdf) pair so the existing loop fires a ray ending at C.  If not,
+        # the corner sits on the "knowns side" of the sample and we add it as
+        # a zero-density anchor point only.
+        k1, k2 = k_c[0], k_c[1]
+        seg = k2 - k1
+        extra_zero_corners = []
+        corners_c = self.phase_field.convert_to_constrained_basis(
+            self.phase_field.corners)
+        seg_norm_sq = float(seg @ seg)
+        extra_c, extra_pdf = [], []
+        for corner in corners_c:
+            d = corner - s
+            if np.linalg.norm(d) < 1e-10:
+                continue
+            # Solve s + t*d = k1 + u*seg  for t, u  (2x2 linear system).
+            M = np.column_stack([d, -seg])
+            det = M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+            if abs(det) < 1e-12:
+                extra_zero_corners.append((corner, 0.0))
+                continue
+            t_u = np.linalg.solve(M, k1 - s)
+            t_val, u_val = float(t_u[0]), float(t_u[1])
+            # Need u on the segment AND the projection to be a *back*-extension
+            # (sample is past c on the ray, so t > 1 for s + t*d == corner with
+            # c = k1 + u*seg lying on the opposite side of the sample).
+            if t_val > 0 and 0.0 <= u_val <= 1.0:
+                c_back = k1 + u_val * seg
+                x_bary = np.array([1 - u_val, u_val])
+                if np.any(np.abs(x_bary) < floor):
+                    x_bary = np.array([floor if v < floor else v - floor
+                                       for v in x_bary])
+                x_mass = self._convert_weights_moletomass(sample.knowns, x_bary)
+                alpha_c = np.array(x_mass) / predicted_error
+                try:
+                    pdf_c = float(dirichlet.pdf(mass_weights, alpha_c))
+                except (ValueError, ZeroDivisionError):
+                    pdf_c = 0.0
+                if not np.isfinite(pdf_c):
+                    pdf_c = 0.0
+                extra_c.append(c_back)
+                extra_pdf.append(pdf_c)
+            else:
+                extra_zero_corners.append((corner, 0.0))
+
+        if extra_c:
+            extra_c = np.array(extra_c)
+            extra_pdf = np.array(extra_pdf)
+            # Renormalise extra pdf into the same scale as known_pdf so each
+            # ray contributes commensurate mass to griddata.
+            denom = float(np.sum(dirichlet_likelihood))
+            if denom > 0:
+                extra_pdf_norm = extra_pdf / denom
+            else:
+                extra_pdf_norm = extra_pdf
+            known_simplex_all = np.vstack([known_simplex, extra_c])
+            known_pdf_all     = np.concatenate([known_pdf, extra_pdf_norm])
+        else:
+            known_simplex_all, known_pdf_all = known_simplex, known_pdf
+
+        p_grid = self._project_known_simplex(
+            known_simplex_all, known_pdf_all, s, n_p,
+            extra_points=extra_zero_corners or None)
 
         # Store projected lines data (set by _project_known_simplex)
         sample._projected_points = np.array(self.projected_simplex)
         sample._projected_p      = np.array(self.projected_simplex_p)
         sample._n_rays           = len(known_simplex)
+        sample._n_rays_emitted   = self.projected_n_rays
 
+        return p_grid
+
+    def _compute_p_dirichlet_3d(self, sample, n_l, n_p, floor=1e-6):
+        """
+        Dirichlet method for exactly 3 knowns in a 3-D constrained space
+        (``m == dim == 3``) — the direct analogue of the 2-D/2-known line method.
+
+        Discretises the k1-k2-k3 triangle into points that are uniform in solid
+        angle from the sample (Möller-Trumbore, via
+        :meth:`_discretise_known_simplex_3d`), evaluates the Dirichlet likelihood
+        of the observed mass weights at each triangle point, then projects that
+        PDF onto omega with the shared :meth:`_project_known_simplex`.
+
+        Falls back to the Gaussian method if the triangle discretisation yields
+        no valid points (e.g. a degenerate sample-triangle configuration).
+        """
+        k_c             = sample.knowns_constrained
+        s               = sample.comp_constrained
+        mass_weights    = sample.mass_weights
+        predicted_error = sample.predicted_error
+
+        tri_points, bary = self._discretise_known_simplex_3d(
+            k_c[0], k_c[1], k_c[2], s, n_l)
+
+        if len(tri_points) == 0:
+            return self._compute_p_gaussian(sample, n_l, n_p)
+
+        # Dirichlet likelihood at each triangle point (mirrors the 2-D loop):
+        # floor the barycentric weights, convert mole→mass, form the Dirichlet
+        # concentration alpha = mass / predicted_error, evaluate at the observed
+        # mass weights.
+        dirichlet_likelihood = []
+        for x in bary:
+            if np.any(np.abs(x) < floor):
+                x = [floor if v < floor else v - floor for v in x]
+            x_mass  = self._convert_weights_moletomass(sample.knowns, x)
+            alpha_l = np.array(x_mass) / predicted_error
+            try:
+                pdf = float(dirichlet.pdf(mass_weights, alpha_l))
+            except (ValueError, ZeroDivisionError):
+                pdf = 0.0
+            if not np.isfinite(pdf):
+                pdf = 0.0
+            dirichlet_likelihood.append(pdf)
+
+        dirichlet_likelihood = (np.array(dirichlet_likelihood)
+                                + np.array(sample.prior) / len(dirichlet_likelihood))
+        known_pdf = dirichlet_likelihood / np.sum(dirichlet_likelihood)
+
+        # Store simplex data for the detail-view visualiser
+        sample._simplex_points = np.array(tri_points)
+        sample._simplex_pdf    = known_pdf
+        sample._n_p            = n_p
+
+        # Anchor the phase-field corners at zero density so the griddata
+        # interpolation hull covers the whole diagram (as the Gaussian path does).
+        corners_c = self.phase_field.convert_to_constrained_basis(
+            self.phase_field.corners)
+        extra = [(c, 0.0) for c in corners_c]
+
+        p_grid = self._project_known_simplex(
+            tri_points, known_pdf, s, n_p, extra_points=extra)
+
+        sample._projected_points = np.array(self.projected_simplex)
+        sample._projected_p      = np.array(self.projected_simplex_p)
+        sample._n_rays           = len(tri_points)
+        sample._n_rays_emitted   = self.projected_n_rays
         return p_grid
 
     def _compute_p_gaussian(self, sample, n_l, n_p, tol=1e-4):
@@ -762,20 +1069,35 @@ class PICIP:
         else:
             raise Exception(f"Gaussian method not implemented for constrained_dim={dim}")
 
-        # Keep only directions on the hemisphere pointing away from k
-        dirs = dirs[dirs @ direction_away > 0]
+        # Flag directions that face *away* from k (the unknown-side hemisphere).
+        # We still cast rays in the other half of the fan with zero density
+        # so the interpolation hull covers the whole phase field and griddata
+        # doesn't zero out corners that happen to lie on the known side.
+        is_away = dirs @ direction_away > 0
 
         # ── Ray sampling ──────────────────────────────────────────────────────
         all_points  = []
         all_values  = []
 
-        for d in dirs:
+        for d, away in zip(dirs, is_away):
             d = d / np.linalg.norm(d)
             intersect = self._find_intersection(poly, s, s + d)
             if intersect is None:
                 continue
             line_len = np.linalg.norm(s - intersect)
             if line_len < 1e-10:
+                continue
+
+            # Place n_p points strictly past the sample (avoids n_l duplicates
+            # at s under griddata's Delaunay triangulation — see chord method).
+            ray_pts = [s + (i / n_p) * (intersect - s)
+                       for i in range(1, n_p + 1)]
+
+            if not away:
+                # Wrong side of the hemisphere — zero density, ray exists only
+                # to extend the interpolation hull.
+                all_points.extend(ray_pts)
+                all_values.extend([0.0] * n_p)
                 continue
 
             # Orthogonal basis: first column = d, rest = perpendicular subspace
@@ -793,9 +1115,41 @@ class PICIP:
                 f           = multivariate_normal.pdf(
                                   y, np.zeros(dim - 1), sigma_perp)
 
-            ray_pts = [s + x / (n_p - 1) * (intersect - s) for x in range(n_p)]
             all_points.extend(ray_pts)
             all_values.extend([f / line_len] * n_p)
+
+        # Ray endpoints land on the boundary *edges*, not the corners — so the
+        # convex hull of ``all_points`` inscribes a polygon strictly inside
+        # the phase field and griddata's fill_value zeroes out the corner
+        # regions of the diagram.  Add each phase-field corner explicitly
+        # with the same Gaussian-PDF / hemisphere logic.
+        corners_c = self.phase_field.convert_to_constrained_basis(
+            self.phase_field.corners)
+        for corner in corners_c:
+            d_corner = corner - s
+            len_corner = float(np.linalg.norm(d_corner))
+            if len_corner < 1e-10:
+                continue
+            d_corner = d_corner / len_corner
+            if d_corner @ direction_away <= 0:
+                all_points.append(corner)
+                all_values.append(0.0)
+                continue
+            Q_c = _orthogonal_basis(d_corner)
+            if dim == 2:
+                perp_c       = Q_c[:, 1]
+                sigma_perp_c = float(perp_c @ sigma @ perp_c)
+                y_c          = float(perp_c @ (s - k))
+                f_c          = scipy.stats.norm.pdf(
+                                   y_c, 0, np.sqrt(max(sigma_perp_c, 1e-30)))
+            else:
+                perp_c       = Q_c[:, 1:].T
+                sigma_perp_c = perp_c @ sigma @ perp_c.T
+                y_c          = perp_c @ (s - k)
+                f_c          = multivariate_normal.pdf(
+                                   y_c, np.zeros(dim - 1), sigma_perp_c)
+            all_points.append(corner)
+            all_values.append(float(f_c / len_corner))
 
         all_points = np.array(all_points)
         all_values = np.array(all_values)
@@ -806,6 +1160,7 @@ class PICIP:
         sample._simplex_pdf      = None
         sample._n_p              = n_p
         sample._n_rays           = n_rays
+        sample._n_rays_emitted   = n_rays
         sample._projected_points = all_points
         sample._projected_p      = all_values
 
@@ -1000,21 +1355,288 @@ class PICIP:
 
         EPS = 1e-10
         valid = np.abs(a) > EPS
-        f = np.where(valid, 1.0 / a, np.inf)        # (M,)
+        # Rays parallel to the triangle give a == 0.  np.where still evaluates
+        # 1.0 / a for every element, and the resulting inf then propagates into
+        # u, v and t as inf/nan — all harmless, because `valid` masks those
+        # entries out below (every comparison against nan is False).  Silence
+        # the numpy warnings so they do not surface to the user as if something
+        # had gone wrong.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            f = np.where(valid, 1.0 / a, np.inf)        # (M,)
 
-        u = f * np.einsum('ij,j->i', h, s_vec)      # (M,)
+            u = f * np.einsum('ij,j->i', h, s_vec)      # (M,)
 
-        q = np.cross(s_vec, E1)                      # (3,) — constant
-        v = f * (dirs @ q)                           # (M,)
-        t = f * float(np.dot(E2, q))                 # (M,) — E2·q is a scalar
+            q = np.cross(s_vec, E1)                      # (3,) — constant
+            v = f * (dirs @ q)                           # (M,)
+            t = f * float(np.dot(E2, q))                 # (M,) — E2·q is a scalar
 
-        valid &= (u >= -EPS) & (v >= -EPS) & (u + v <= 1.0 + EPS) & (t > 0)
+            valid &= (u >= -EPS) & (v >= -EPS) & (u + v <= 1.0 + EPS) & (t > 0)
 
         u, v, t = u[valid], v[valid], t[valid]
         points = sample + t[:, None] * dirs[valid]               # (M', 3)
         bary_coords = np.stack([1.0 - u - v, u, v], axis=1)     # (M', 3)
 
         return points, bary_coords
+
+    def _fibonacci_sphere(self, n):
+        """Approximately uniform unit vectors on S^2 (Fibonacci lattice)."""
+        golden = (1 + 5 ** 0.5) / 2
+        idx = np.arange(n)
+        theta = 2 * np.pi * idx / golden
+        phi = np.arccos(1 - 2 * (idx + 0.5) / n)
+        return np.stack([
+            np.cos(theta) * np.sin(phi),
+            np.sin(theta) * np.sin(phi),
+            np.cos(phi),
+        ], axis=1)
+
+    def _chord_back_simplex_2d(self, s, direction, K, eps=1e-9):
+        """
+        Intersect the line ``s + t·direction`` with the K-triangle (m=3 corners
+        in 2-D) and return the back-side chord (t ≤ 0).
+
+        Returns
+        -------
+        (t_in, t_out) or None
+            ``t_in ≤ t_out ≤ 0``; the chord runs from ``s + t_in·direction`` to
+            ``s + t_out·direction``.  ``t_out = 0`` when the sample lies inside
+            the K-triangle along this line.  ``None`` if no back-side chord.
+        """
+        K = np.asarray(K)
+        ts = []
+        m = len(K)
+        for i in range(m):
+            a = K[i]
+            b = K[(i + 1) % m]
+            M = np.column_stack([direction, -(b - a)])
+            det = M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+            if abs(det) < eps:
+                continue
+            t, u = np.linalg.solve(M, a - s)
+            if -eps <= u <= 1 + eps:
+                ts.append(float(t))
+        ts_neg = sorted(t for t in ts if t < -eps)
+        ts_pos = sorted(t for t in ts if t > eps)
+        if not ts_neg:
+            return None
+        if len(ts_neg) >= 2:
+            return ts_neg[0], ts_neg[-1]
+        if ts_pos:                        # sample inside K-triangle along line
+            return ts_neg[0], 0.0
+        return None
+
+    def _chord_back_simplex_3d(self, s, direction, K, eps=1e-9):
+        """
+        Intersect the line ``s + t·direction`` with the K-tetrahedron (m=4
+        corners in 3-D) and return the back-side chord (t ≤ 0).
+
+        Iterates over the four triangular faces using Möller-Trumbore.
+        """
+        from itertools import combinations
+        K = np.asarray(K)
+        ts = []
+        for face in combinations(range(len(K)), 3):
+            v0, v1, v2 = K[list(face)]
+            e1 = v1 - v0
+            e2 = v2 - v0
+            h = np.cross(direction, e2)
+            a = float(np.dot(e1, h))
+            if abs(a) < eps:
+                continue
+            f = 1.0 / a
+            s_vec = s - v0
+            u = f * float(np.dot(s_vec, h))
+            if u < -eps or u > 1 + eps:
+                continue
+            q = np.cross(s_vec, e1)
+            v = f * float(np.dot(direction, q))
+            if v < -eps or u + v > 1 + eps:
+                continue
+            t = f * float(np.dot(e2, q))
+            ts.append(t)
+        ts_neg = sorted(t for t in ts if t < -eps)
+        ts_pos = sorted(t for t in ts if t > eps)
+        if not ts_neg:
+            return None
+        if len(ts_neg) >= 2:
+            return ts_neg[0], ts_neg[-1]
+        if ts_pos:
+            return ts_neg[0], 0.0
+        return None
+
+    def _compute_p_dirichlet_chord(self, sample, n_l, n_p, floor=1e-6):
+        """
+        Chord-integration path for ``m == d+1`` (full-dimensional K-simplex).
+
+        For each direction ``d`` in an angularly-uniform fan through the sample,
+        the line ``s + t·d`` cuts a chord through the K-simplex on the back side
+        of ``s``.  Every ``c`` on that chord is a "mixture-of-knowns" position
+        whose forward ray (from ``c`` through ``s``) hits the same forward
+        boundary point — so all those rays coincide and the per-line likelihood
+        is the chord-integrated Dirichlet PDF::
+
+            Λ(ℓ) = ∫_{c ∈ chord(ℓ)}  Dir(w_obs_mass | mass(α(c))/σ)  dτ
+
+        The integrated likelihood is distributed uniformly along the forward
+        ray within Ω (mass ``Λ/L_fwd`` per unit length), then interpolated onto
+        the omega grid via griddata — the same final stage as the m≤d path.
+
+        Used for (d=2, m=3) and (d=3, m=4).
+        """
+        s          = np.asarray(sample.comp_constrained, dtype=float)
+        K          = np.asarray(sample.knowns_constrained, dtype=float)  # (m, dim)
+        m, dim     = K.shape
+        sigma      = sample.predicted_error
+        mass_obs   = sample.mass_weights
+
+        # Closed-form barycentric inverse: solve [K^T; 1] α = [c; 1].
+        K_aug = np.vstack([K.T, np.ones(m)])      # (dim+1, m), square for m=dim+1
+        K_aug_inv = np.linalg.inv(K_aug)
+
+        # Forward boundary intersection setup
+        lines = np.array(self.phase_field._get_constraint_lines())
+        poly  = {'A': lines[:, :-1], 'b': -lines[:, -1]}
+
+        # Direction fan
+        if dim == 2:
+            theta = np.linspace(0, 2 * np.pi, n_l, endpoint=False)
+            directions = np.stack([np.cos(theta), np.sin(theta)], axis=1)
+        elif dim == 3:
+            directions = self._fibonacci_sphere(n_l)
+        else:
+            raise Exception(f"Chord method not supported for dim={dim}")
+
+        n_chord       = max(n_l, 20)
+        all_points    = []
+        all_values    = []
+        chord_pts_viz = []
+        chord_pdf_viz = []
+
+        for d_fwd in directions:
+            d_fwd = d_fwd / np.linalg.norm(d_fwd)
+            if dim == 2:
+                chord = self._chord_back_simplex_2d(s, d_fwd, K)
+            else:
+                chord = self._chord_back_simplex_3d(s, d_fwd, K)
+
+            # Forward ray endpoint and length are needed regardless of whether
+            # the line crosses the K-simplex — without this fallback, any
+            # direction with no back-chord leaves a wedge of the phase field
+            # uncovered by ``all_points`` and griddata's fill_value zeroes the
+            # corners of the diagram in those directions.
+            end_point = self._find_intersection(poly, s, s + d_fwd)
+            if end_point is None:
+                continue
+            L_fwd = float(np.linalg.norm(end_point - s))
+            if L_fwd < 1e-10:
+                continue
+            # Skip i=0 to avoid n_l duplicate points at the sample under griddata.
+            ray_pts = [s + (i / n_p) * (end_point - s) for i in range(1, n_p + 1)]
+
+            if chord is None or (chord[1] - chord[0]) < 1e-10:
+                # Line through sample misses the K-simplex along this direction:
+                # no Dirichlet support → contribute the ray with zero density
+                # so the interpolation hull still covers the diagram.
+                all_points.extend(ray_pts)
+                all_values.extend([0.0] * n_p)
+                continue
+
+            t_in, t_out = chord
+            ts        = np.linspace(t_in, t_out, n_chord)
+            dtau      = (t_out - t_in) / max(n_chord - 1, 1)
+            cs        = s + ts[:, None] * d_fwd                   # (n_chord, dim)
+
+            # Bary coords of every chord point in one shot
+            cs_aug    = np.column_stack([cs, np.ones(len(cs))]).T  # (dim+1, n_chord)
+            alphas    = (K_aug_inv @ cs_aug).T                     # (n_chord, m)
+
+            Lambda = 0.0
+            for c, alpha in zip(cs, alphas):
+                a = np.where(np.abs(alpha) < floor, floor, alpha)
+                a = a / a.sum()
+                mass_alpha = self._convert_weights_moletomass(sample.knowns, a)
+                try:
+                    lj = float(dirichlet.pdf(mass_obs, mass_alpha / sigma))
+                except (ValueError, ZeroDivisionError):
+                    lj = 0.0
+                if not np.isfinite(lj):
+                    lj = 0.0
+                Lambda += lj * dtau
+                chord_pts_viz.append(c)
+                chord_pdf_viz.append(lj)
+
+            all_points.extend(ray_pts)
+            all_values.extend([Lambda / L_fwd] * n_p)
+
+        # Ensure each phase-field corner is included so the interpolation hull
+        # spans the diagram — without this, omega corner points fall outside
+        # the convex hull of ``all_points`` and griddata zeroes them out.
+        corners_c = self.phase_field.convert_to_constrained_basis(
+            self.phase_field.corners)
+        for corner in corners_c:
+            d_corner = corner - s
+            len_corner = float(np.linalg.norm(d_corner))
+            if len_corner < 1e-10:
+                continue
+            d_corner = d_corner / len_corner
+            if dim == 2:
+                chord_c = self._chord_back_simplex_2d(s, d_corner, K)
+            else:
+                chord_c = self._chord_back_simplex_3d(s, d_corner, K)
+            if chord_c is None or (chord_c[1] - chord_c[0]) < 1e-10:
+                all_points.append(corner)
+                all_values.append(0.0)
+                continue
+            t_in_c, t_out_c = chord_c
+            ts_c   = np.linspace(t_in_c, t_out_c, n_chord)
+            dtau_c = (t_out_c - t_in_c) / max(n_chord - 1, 1)
+            cs_c   = s + ts_c[:, None] * d_corner
+            cs_aug_c = np.column_stack([cs_c, np.ones(len(cs_c))]).T
+            alphas_c = (K_aug_inv @ cs_aug_c).T
+            Lambda_c = 0.0
+            for cc, alpha in zip(cs_c, alphas_c):
+                a = np.where(np.abs(alpha) < floor, floor, alpha)
+                a = a / a.sum()
+                mass_alpha = self._convert_weights_moletomass(sample.knowns, a)
+                try:
+                    lj = float(dirichlet.pdf(mass_obs, mass_alpha / sigma))
+                except (ValueError, ZeroDivisionError):
+                    lj = 0.0
+                if not np.isfinite(lj):
+                    lj = 0.0
+                Lambda_c += lj * dtau_c
+            all_points.append(corner)
+            all_values.append(float(Lambda_c / len_corner))
+
+        if not all_points:
+            raise ZeroPException()
+
+        all_points = np.array(all_points)
+        all_values = np.array(all_values)
+
+        sample._simplex_points   = np.array(chord_pts_viz) if chord_pts_viz else None
+        sample._simplex_pdf      = np.array(chord_pdf_viz) if chord_pdf_viz else None
+        sample._n_p              = n_p
+        sample._n_rays           = len(all_points) // n_p if n_p else 0
+        sample._n_rays_emitted   = sample._n_rays
+        sample._projected_points = all_points
+        sample._projected_p      = all_values
+        self.projected_simplex   = list(all_points)
+        self.projected_simplex_p = list(all_values)
+
+        try:
+            p = griddata(all_points, all_values, self.phase_field.omega,
+                         method='linear', fill_value=0)
+        except Exception:
+            p = griddata(all_points, all_values, self.phase_field.omega,
+                         method='nearest', fill_value=0)
+        if np.isnan(p).any():
+            p = np.nan_to_num(p)
+        if np.any(p < 0):
+            p[p < 0] = 0
+        if p.sum() == 0:
+            raise ZeroPException()
+        return p / p.sum()
 
     def _map_to_ab_line(self,point, A, B, ret_t=False):
         """
@@ -1029,7 +1651,8 @@ class PICIP:
         y = round(1 - t,4)
         return np.array([y,x])
 
-    def _project_known_simplex(self, known_simplex, known_pdf, sample, n_p, tol=1e-4):
+    def _project_known_simplex(self, known_simplex, known_pdf, sample, n_p,
+                               tol=1e-4, extra_points=None):
         """
         Project the known-simplex PDF onto the omega grid via ray casting.
 
@@ -1079,22 +1702,47 @@ class PICIP:
                 }
         points=[]
         values=[]
-        for x,p in zip(known_simplex,known_pdf):
-            line=[]
-            direction=sample-x
+        n_rays_used=0
+        for c, pdf in zip(known_simplex, known_pdf):
+            direction = sample - c
             if np.linalg.norm(direction) < 1e-10:
                 continue   # simplex point coincides with sample — skip
-            direction=direction/np.linalg.norm(direction)
-            end_point=self._find_intersection(polygon_constraints,x,sample)
-            l_ps=[(sample+x/(n_p-1)*(end_point-sample))
-                  for x in range(n_p)]
-            points+=l_ps
-            p=p/np.linalg.norm(sample-end_point)
-            values+=[p]*n_p
+            end_point = self._find_intersection(polygon_constraints, c, sample)
+            if end_point is None:
+                # _find_intersection discards crossings closer than its epsilon
+                # to c, so it returns None when c already sits on the phase-field
+                # boundary — which happens whenever a known phase is a corner,
+                # edge or face phase and the simplex touches the hull.  Such a
+                # ray has no interior length to carry density along, so skip it.
+                continue
+            # Place n_p points strictly *past* the sample along the forward ray.
+            # Skipping the i=0 case avoids n_l duplicate input points at the
+            # sample location — duplicates make scipy's Delaunay triangulation
+            # pick one ray's value arbitrarily for the shared vertex, which
+            # propagates as radial oscillation in the interpolated density.
+            l_ps = [sample + (i / n_p) * (end_point - sample)
+                    for i in range(1, n_p + 1)]
+            points += l_ps
+            values += [pdf / np.linalg.norm(sample - end_point)] * n_p
+            n_rays_used += 1
+
+        if n_rays_used == 0:
+            raise ZeroPException()
+
+        # Caller-supplied (point, value) pairs — used to add the phase-field
+        # corners so the interpolation hull covers the diagram.
+        if extra_points is not None:
+            for pt, v in extra_points:
+                points.append(np.asarray(pt))
+                values.append(float(v))
 
         #plotting
         self.projected_simplex=points
         self.projected_simplex_p=values
+        # Rays actually emitted, which is <= len(known_simplex) once degenerate
+        # rays are skipped.  The first n_rays_used * n_p entries of
+        # projected_simplex are the ray block, laid out ray-major.
+        self.projected_n_rays=n_rays_used
 
         try:
             p = griddata(points, values, self.phase_field.omega,

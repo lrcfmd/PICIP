@@ -4,3 +4,18 @@ __pycache__/
 output/*
 !output/.gitkeep
 tutorial_suggestions.*
+
+# Build artefacts
+dist/
+build/
+
+# Local analysis scripts, diagnostics and their output — not part of the package
+figures/
+gaussian_vs_dirichlet_2d/
+gaussian_vs_dirichlet_3d/
+dirichlet_3d_diagnostic/
+data/
+src/example_spinel.py
+src/synthetic_testing.py
+src/parameter_optimisation.py
+template_changes.txt

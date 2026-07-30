@@ -14,6 +14,7 @@ Documentation
 -------------
   Installation  : ../PICIP_installation.md
   User manual   : ../PICIP_manual.md
+  Evaluation    : tutorial_evaluation.py
   Setup tutorial: tutorial_setup.py
   2-D PICIP tutorial: tutorial_2d.py
 """
@@ -100,10 +101,13 @@ result_few  = spread4.run(n=5,  num_repeats=20)   # coarse coverage
 result_many = spread4.run(n=20, num_repeats=20)   # fine coverage
 
 print("\n4. Spread quality for n=5:")
-spread4.evaluate_spread(result_few)    # opens matplotlib figure
+# evaluate_spread returns the figure and displays nothing by default.  Write it
+# to a file rather than popping a viewer, so this tutorial stays non-interruptive;
+# pass show=True instead if you want it opened immediately.
+spread4.evaluate_spread(result_few,  save='../output/spread_coverage_few.png')
 
 print("4. Spread quality for n=20:")
-spread4.evaluate_spread(result_many)   # opens matplotlib figure
+spread4.evaluate_spread(result_many, save='../output/spread_coverage_many.png')
 
 
 # ══════════════════════════════════════════════════════════════════════════════

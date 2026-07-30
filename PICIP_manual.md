@@ -4,34 +4,127 @@
 
 PICIP uses Bayesian inference to predict the composition of an *unknown* phase present in a multi-phase XRD sample. Given the measured sample composition and the identities of the *known* co-existing phases (from Rietveld refinement), PICIP places a probability density over the entire composition space and returns the most likely compositions for the unknown phase, together with suggested next experiments.
 
----
-
-> **New here? Start with the tutorials** (clone the repo to get these):
-> - `tutorials/tutorial_setup.py` — phase field setup (all options)
-> - `tutorials/tutorial_2d.py` — 2-D phase fields end to end
-> - `tutorials/tutorial_3d.py` — 3-D phase fields end to end
->
-> Run any tutorial top to bottom; each section opens an interactive figure in your browser.
+Not installed yet? See the [Installation Guide](PICIP_installation.md).
 
 ---
 
 ## Contents
 
-1. [How it works](#1-how-it-works)
-2. [Step 1 — Set up a phase field](#2-step-1--set-up-a-phase-field)
-3. [Step 2 — Add samples](#3-step-2--add-samples)
-4. [Step 3 — Run inference](#4-step-3--run-inference)
-5. [Step 4 — Plot results](#5-step-4--plot-results)
-6. [Suggestions — what to synthesise next](#6-suggestions--what-to-synthesise-next)
-7. [Multiple samples](#7-multiple-samples)
-8. [Single-known (original PICIP) inference](#8-single-known-original-picip-inference)
-9. [Composition spreading](#9-composition-spreading)
-10. [Parameter reference](#10-parameter-reference)
-11. [Reference](#11-reference)
+1. [Quick start](#1-quick-start)
+2. [How it works](#2-how-it-works)
+3. [Step 1 — Set up a phase field](#3-step-1--set-up-a-phase-field)
+4. [Step 2 — Add samples](#4-step-2--add-samples)
+5. [Step 3 — Run inference](#5-step-3--run-inference)
+6. [Step 4 — Plot results](#6-step-4--plot-results)
+7. [Suggestions — what to synthesise next](#7-suggestions--what-to-synthesise-next)
+8. [Multiple samples](#8-multiple-samples)
+9. [The two inference methods](#9-the-two-inference-methods)
+10. [Composition spreading](#10-composition-spreading)
+11. [Parameter reference](#11-parameter-reference)
+12. [Evaluating PICIP on synthetic phase fields](#12-evaluating-picip-on-synthetic-phase-fields)
+13. [Reference](#13-reference)
 
 ---
 
-## 1. How it works
+## 1. Quick start
+
+A complete run: define the composition space, describe one measured sample,
+infer where the unknown phase sits, and get compositions to synthesise next.
+
+```python
+from picip import Phase_Field, PICIP, Sample, make_plotter
+
+# 1. The composition space. Three elements, no charge constraint → a 2-D triangle.
+pf = Phase_Field()
+pf.setup_uncharged(["Fe", "Mn", "Ti"])
+
+# 2. One measured sample: what you refined, and what you identified in it.
+sample = Sample("s1", "Fe2Mn4Ti4")     # overall measured composition
+sample.add_knowns(["FeMn", "FeTi"])    # phases you identified
+sample.add_mass_weights([0.3, 0.7])    # their Rietveld mass fractions, summing to 1
+sample.set_predicted_error(0.3)        # how much you trust those fractions
+
+# 3. Infer where the unknown phase is.
+picip = PICIP(pf)
+picip.add_sample(sample)
+pred = picip.run()
+
+# 4. Ask what to make next.
+suggestions = picip.suggest(pred, n=5, min_dist=0.05)
+suggestions.print_table()
+
+# 5. Look at it.
+pl = make_plotter(pf)
+pl.plot_prediction_results(pred, plot_average_known=True)
+pl.show(save="quickstart")             # opens in your browser, writes quickstart.html
+```
+
+Printed output:
+
+```
+mean      Fe=0.099  Mn=0.562  Ti=0.339
+sampled   Fe=0.053  Mn=0.633  Ti=0.314
+sampled   Fe=0.000  Mn=0.740  Ti=0.260
+sampled   Fe=0.161  Mn=0.447  Ti=0.392
+sampled   Fe=0.217  Mn=0.782  Ti=0.001
+```
+
+`mean` is the single most likely composition for the unknown phase. The
+`sampled` rows are spread across the rest of the probability density, at least
+`min_dist` apart, so a batch of five experiments covers the plausible region
+rather than clustering on one point.
+
+The figure shows the probability density over the whole triangle, with the
+measured sample and the two known phases marked. Hover any point for its
+composition.
+
+### What each piece is
+
+| Object | Role |
+|---|---|
+| `Phase_Field` | The space of compositions PICIP reasons over, as a grid of points |
+| `Sample` | One measured result: composition, identified phases, their mass fractions |
+| `PICIP` | Runs the inference over one or more samples |
+| `Prediction` | The answer — `pred.prob_density` is one probability per grid point |
+| `Suggestions` | Compositions to synthesise next; `.print_table()` prints them, `.save("file.csv")` writes them out |
+
+### Where to go next
+
+- **Understand the method** → [§2 How it works](#2-how-it-works)
+- **Your system isn't a simple ternary** → [§3 Set up a phase field](#3-step-1--set-up-a-phase-field)
+  covers charged, mixed-valence and custom-stoichiometry systems
+- **The prediction looks too tight or too diffuse** → tune `predicted_error`,
+  [§4](#4-step-2--add-samples)
+- **You have more than one sample of the same unknown** → [§8 Multiple samples](#8-multiple-samples)
+- **Run it end to end yourself** → `tutorials/tutorial_2d.py` is this example
+  expanded, with a section per parameter
+
+> **Tutorials** (clone the repo to get these — see the Installation Guide):
+> | File | Covers |
+> |---|---|
+> | `tutorial_setup.py` | All four phase-field setup methods |
+> | `tutorial_2d.py` | 2-D fields end to end, uncharged and charged |
+> | `tutorial_3d.py` | 3-D fields end to end, uncharged and charged |
+> | `tutorial_spread.py` | Composition spreading |
+> | `tutorial_evaluation.py` | Scoring PICIP against synthetic fields (§12) |
+
+### Ready-made scripts
+
+`scripts/` holds one short, self-contained script per phase-field type — the quick start above adapted to each. Copy the one closest to your system and edit the compositions.
+
+| Script | Phase field | Knowns | Method |
+|---|---|---|---|
+| `quickstart_uncharged.py` | `setup_uncharged` — Fe-Mn-Ti | 2 | Dirichlet + both suggestion methods |
+| `quickstart_charged.py` | `setup_charged` — Ba-Y-Si-O | 2 | Dirichlet + both suggestion methods |
+| `quickstart_charge_ranges.py` | `setup_charge_ranges` — Fe-Mn-O, mixed valence | 2 | Dirichlet + both suggestion methods |
+| `quickstart_custom_constraint.py` | `setup_custom` — spinel Li-Fe-Mn-O | 2 | Dirichlet + both suggestion methods |
+| `quickstart_charged_3knowns_gaussian.py` | `setup_charged` — Ba-Y-Si-O | 3 | Gaussian (the default) |
+
+The first four are all 2-D with two knowns, which is a supported Dirichlet configuration, and each shows `suggest()` and `suggest_kmedoids()` side by side ([section 7](#7-suggestions--what-to-synthesise-next)). The last has three knowns in a 2-D field, which Dirichlet cannot handle, so it uses the Gaussian default — see [section 9](#9-the-two-inference-methods) for why.
+
+---
+
+## 2. How it works
 
 ### The problem
 
@@ -46,21 +139,21 @@ What you do not know is the composition or mass fraction of any *unknown* phase.
 
 ### Geometry
 
-PICIP works in **constrained composition space** — the simplex of all charge-neutral (or stoichiometry-neutral) compositions in your element system. For a ternary uncharged system this is a 2-D triangle; for a quaternary system it is a 3-D tetrahedron.
+PICIP works in **constrained composition space** — the polytope of all compositions which satisfy the defined constraints. This is a simplex if no constraints are considered, or some slice or subregion of that simplex if constraints such as charge neutrality or restricted precursors are imposed. For a ternary uncharged system this is a 2-D triangle, for a quaternary uncharged system this is a 3-D tetrahedron. The dimension of this space is the *constrained dimension*, `d`.
 
-All known phases occupy fixed points in this space. Their mass fractions define a probability distribution over the *known simplex* (the line between two knowns, or the triangle between three).
+All known phases occupy fixed points in this space. Their convex hull is the *known simplex*: a line for two knowns, a triangle for three, a tetrahedron for four. Their mass fractions define a point on the known simplex referred to as the average known composition. PICIP accounts for error in the calculation of these mass fractions and uses this to construct a probability distribution on the known simplex for the average known composition.
 
 ### Inference
 
-For each point on the known simplex, PICIP casts a ray from that point through the measured sample composition toward the opposite boundary. Any composition on that ray is consistent with the sample being a mixture of the known phases at that support point *plus* the unknown at some composition along the ray.
+For each composition on the known simplex, PICIP draws a line through the measured sample: any composition on the forward portion of that line is consistent with the sample being a mixture of the known phases at that composition *plus* the unknown at some composition along the line. Each line is weighted by the probability of its supporting composition under the distribution described above, and the weighted lines are interpolated onto the composition grid to give the posterior.
 
-The probability density on each ray is proportional to the probability of the support point. Stacking all rays and interpolating onto the composition grid gives the full probability density over the phase field — the set of unknown compositions consistent with the measurement.
+When the known simplex has the same dimension as the phase field — three knowns in a 2-D phase field, or four knowns in a 3-D one — many supporting compositions share the same line through the sample. This degeneracy is one reason the Gaussian method is the default; see [§9 The two inference methods](#9-the-two-inference-methods).
 
 When **multiple samples** share the same unknown phase, their individual densities are multiplied together. The combined density is far narrower than any individual prediction because only compositions consistent with *all* samples simultaneously survive.
 
 ---
 
-## 2. Step 1 — Set up a phase field
+## 3. Step 1 — Set up a phase field
 
 A `Phase_Field` defines the grid of compositions that PICIP reasons over. Choose the setup method that matches your system.
 
@@ -91,7 +184,7 @@ pf.setup_charged({"Fe": 3, "Mn": 2, "Ti": 4, "Cu": 2, "O": -2})   # 5 elements �
 
 ### Charged systems — mixed oxidation states
 
-Use when an element can take a range of oxidation states (e.g. Fe²⁺/Fe³⁺). Supply a `[min, max]` list for mixed-valence elements and a single value for fixed. The constrained dimension is `N − 2`.
+Use when an element can take a range of oxidation states (e.g. Fe²⁺/Fe³⁺). Supply a `[min, max]` list for mixed-valence elements and a single value for fixed. The constrained dimension is `N − 1`.
 
 ```python
 pf.setup_charge_ranges({"Fe": [2, 3], "Mn": [2, 3], "Ti": [3, 4], "O": -2})
@@ -152,12 +245,12 @@ The constrained basis is random by default. To fix it across runs:
 
 ```python
 pf.setup_uncharged(["Fe", "Mn", "Ti"], print_basis=True)        # prints basis to stdout
-pf.setup_uncharged(["Fe", "Mn", "Ti"], precalculated_basis=<array>)  # reuse it
+pf.setup_uncharged(["Fe", "Mn", "Ti"], precalculated_basis=saved_basis)  # reuse it
 ```
 
 ---
 
-## 3. Step 2 — Add samples
+## 4. Step 2 — Add samples
 
 A `Sample` holds one measured XRD result: the overall composition, the identified co-existing phases, and their Rietveld mass fractions.
 
@@ -189,11 +282,11 @@ picip = PICIP(pf)
 picip.add_sample(sample)
 ```
 
-`add_sample` validates the sample against the phase field, converts compositions into the constrained basis, and computes the weight-averaged known position. Multiple samples can be added for combined inference — see [Multiple samples](#7-multiple-samples).
+`add_sample` validates the sample against the phase field, converts compositions into the constrained basis, and computes the weight-averaged known position. Multiple samples can be added for combined inference — see [Multiple samples](#8-multiple-samples).
 
 ---
 
-## 4. Step 3 — Run inference
+## 5. Step 3 — Run inference
 
 ```python
 pred = picip.run(n_l=50, n_p=50)
@@ -201,12 +294,39 @@ pred = picip.run(n_l=50, n_p=50)
 
 Returns a `Prediction` object containing the normalised probability density over the phase field grid.
 
+### Default routing
+
+`picip.run()` defaults to **`version='gaussian'`** — the original PICIP algorithm from the paper, the well-tested path, and valid for any number of knowns in any dimension. You do not need to set `version` for the standard workflow.
+
+**`version='dirichlet'`** opts into the Dirichlet method, which is implemented for exactly two configurations:
+
+| constrained dim | # knowns | `version='dirichlet'` gives |
+|---|---|---|
+| 2 | 2 | **Dirichlet** along the k1–k2 line segment |
+| 3 | 3 | **Dirichlet** over the k1–k2–k3 triangle |
+| anything else | anything else | warning, then **Gaussian** |
+
+These are the two cases where the known simplex has one dimension fewer than the phase field, which is where the method has a clean geometric interpretation: the unknown's position along each projection line is fixed by a single mixing weight.
+
+Requesting `version='dirichlet'` anywhere else — 1 known, 3+ knowns in 2-D, or any count other than exactly 3 in 3-D — emits a warning that the method is untested there and falls back to Gaussian, so you still get a result, just not the one you asked for:
+
+**The warning only appears if you asked for `'dirichlet'`.** The default path never warns: Gaussian is valid for any number of knowns in any dimension, so there is nothing to fall back from. If you have not set `version`, you will not see this message whatever your dimension and known count.
+
+```
+RuntimeWarning: The Dirichlet method (version='dirichlet') is implemented only for 2-D
+with 2 known phases and 3-D with 3 known phases. Sample 's1' is 3-D with 2 known
+phases, which is untested — falling back to the Gaussian method. Pass
+version='gaussian' to select it explicitly and silence this warning.
+```
+
+Worked examples of opting in are in the quick-start section of `tutorials/tutorial_2d.py` (2 knowns in 2-D) and `tutorials/tutorial_3d.py` (3 knowns in 3-D).
+
 ### Resolution parameters
 
 | Parameter | Controls | Recommended |
 |-----------|----------|-------------|
-| `n_l` | Points along the known simplex — more gives a smoother result | 50 for 2-D, 30–50 for 3-D |
-| `n_p` | Interpolation points per projected ray | 50 for 2-D, 10–20 for 3-D |
+| `n_l` | Number of ray directions | 50 for 2-D, 30–100 for 3-D |
+| `n_p` | Interpolation points per projected ray | 10–50 (effect is small) |
 
 > [!NOTE]
 > Diminishing returns above `n_l = 100`. The effect is shown in section 5 of `tutorial_2d.py`.
@@ -221,7 +341,7 @@ pred_both = picip.run()       # all samples — densities multiplied together
 
 ---
 
-## 5. Step 4 — Plot results
+## 6. Step 4 — Plot results
 
 ```python
 from picip import make_plotter
@@ -294,14 +414,14 @@ pl.show(save="my_figure")    # writes my_figure.html (interactive Plotly)
 
 ---
 
-## 6. Suggestions — what to synthesise next
+## 7. Suggestions — what to synthesise next
 
 ```python
 suggestions = picip.suggest(
     pred,
     n=5,           # number of suggestions
     min_dist=0.05  # minimum spacing between suggestions in constrained-basis
-                   # coordinates, where 1.0 spans the full phase field
+                   # coordinates
 )
 ```
 
@@ -314,8 +434,7 @@ If `min_dist` is large enough that no valid candidates remain, fewer than `n` po
 
 ```python
 # Print
-for label, row in zip(suggestions.labels, suggestions.standard):
-    print(f"  {label:8s}  Fe={row[0]:.3f}  Mn={row[1]:.3f}  Ti={row[2]:.3f}")
+suggestions.print_table()
 
 # Save to CSV
 suggestions.save("suggestions.csv")
@@ -323,9 +442,20 @@ suggestions.save("suggestions.csv")
 
 > Suggestions are automatically overlaid on the next `plot_prediction_results` call. Demonstrated in section 6 of both tutorial files.
 
+### Experimental: `suggest_kmedoids`
+
+```python
+suggestions = picip.suggest_kmedoids(pred, n=5)
+```
+
+An alternative batch selection that picks points to minimise the posterior-weighted expected distance from the batch to the true unknown — i.e. it optimises *how close the best composition in the batch will be*, rather than sampling from the density. The batch is deterministic, with no random draws.
+
+> [!WARNING]
+> **Less tested than `suggest()`.** It has been benchmarked on synthetic phase fields ([section 12](#12-evaluating-picip-on-synthetic-phase-fields)) but not on real experimental workflows. Use `suggest()` routinely; reach for this when you want a deterministic batch, or are scoring batches by closest-hit distance.
+
 ---
 
-## 7. Multiple samples
+## 8. Multiple samples
 
 Adding several samples that share the same unknown phase multiplies their probability densities together. The combined result is far narrower than any single prediction — only compositions consistent with *all* measurements simultaneously survive.
 
@@ -352,47 +482,43 @@ Demonstrated in section 4 of `tutorial_2d.py` and section 5 of `tutorial_3d.py`.
 
 ---
 
-## 8. Single-known (original PICIP) inference
+## 9. The two inference methods
 
-The original PICIP algorithm described in the paper uses a **Gaussian method** rather than the Dirichlet simplex approach. It applies when you have identified only one co-existing known phase, so there is no simplex to discretise — just a single point in composition space.
+[Section 2](#2-how-it-works) describes the method in general terms: the mass fractions fix an average known composition on the known simplex, measurement error turns that into a probability distribution, and lines drawn through the sample are weighted by it. The two methods differ in how they represent that distribution.
 
-It is triggered automatically when you supply one known phase, or explicitly via `version='gaussian'` on any run:
+### The Gaussian method (the default)
 
-```python
-# Automatic — one known
-sample = Sample("s1", "Fe2Mn4Ti4")
-sample.add_knowns(["FeMn"])
-sample.add_mass_weights([1.0])
-sample.set_predicted_error(0.3)
-picip = PICIP(pf)
-picip.add_sample(sample)
-pred = picip.run()                          # Gaussian used automatically
+The original PICIP algorithm from the paper, and what `picip.run()` uses unless you ask for otherwise. It works for any number of knowns in any dimension, so it needs no `version` argument.
 
-# Explicit — force Gaussian even with 2+ knowns
-pred_gaussian = picip.run(version='gaussian')   # original PICIP algorithm
-pred_dirichlet = picip.run(version='b')         # Dirichlet (default)
-```
-
-### How it differs from the Dirichlet method
-
-With 2+ knowns, the mass fractions define a known simplex (a line for two knowns, a triangle for three). The Dirichlet method places support across this simplex and casts rays from each support point through the sample.
-
-With 1 known — or when `version='gaussian'` is used regardless of how many knowns there are — there is no simplex. Instead, support is a **Gaussian centred on the average known** (the mass-fraction-weighted centroid of all knowns, which for a single known is just that known composition itself). The algorithm then:
+For each sample, the **average known** is the mass-fraction-weighted centroid of all reported knowns (just the single known composition when only one is present). The Gaussian method then:
 
 1. Fires `n_l` rays from the **sample point** outward on a hemisphere pointing away from the average known.
 2. Weights each ray by a **Gaussian** in the perpendicular distance from the average known to that ray — rays that nearly pass through it get high weight; rays that miss it widely get low weight.
-3. Interpolates the weighted ray values onto the omega grid as usual.
+3. Interpolates the weighted ray values onto the omega grid.
 
-The result is a cone centred opposite the known from the sample. The cone narrows with lower `predicted_error`.
+The result is a cone centred opposite the known centroid as seen from the sample. The cone narrows with lower `predicted_error`.
 
-> [!TIP]
-> If you have mass fractions available, always prefer the Dirichlet method (`version='b'`, 2+ knowns) — it gives a much tighter prediction.
+### The Dirichlet method
+
+Selected with `version='dirichlet'`. Rather than collapsing the knowns to one point, it keeps them distinct and works with their *mixing ratio* directly:
+
+1. Discretises the known simplex into `n_l` support compositions — points along the k1–k2 line in 2-D, or across the k1–k2–k3 triangle in 3-D.
+2. Weights each support composition by a **Dirichlet** likelihood over the mixing ratios, with concentration `weights / predicted_error`, so the measured mass fractions peak the distribution and `predicted_error` sets its width.
+3. Projects each support composition through the sample along its own line, sampling `n_p` points per line, then interpolates onto the omega grid.
+
+Because every mixing ratio is projected separately, the measured mass fractions do more than set a centroid — they shape the density along the whole known simplex.
+
+### Choosing between them
+
+The Dirichlet construction needs the known simplex to be one dimension below the phase field, so that each support composition gives a distinct line through the sample. That is why `version='dirichlet'` covers 2-D + 2 knowns (a k1–k2 line) and 3-D + 3 knowns (a k1–k2–k3 triangle) and nothing else. Where the known simplex has the *same* dimension as the field (3 knowns in 2-D, 4 in 3-D), many mixing ratios share one line through the sample and the construction is not well posed.
+
+Gaussian has no such restriction and is the better-tested path, which is why it is the default. Reach for Dirichlet when you are in one of its two supported configurations and want the mass fractions to carry more weight than a centroid. See [section 5](#5-step-3--run-inference) for the dispatch rules and the fallback warning.
 
 ---
 
-## 9. Composition spreading
+## 10. Composition spreading
 
-`Spread` finds a set of compositions that are as evenly distributed as possible across a phase field — useful for planning an exploratory synthesis campaign where you want maximum coverage of the composition space. It uses Lloyd's algorithm (Voronoi relaxation): each point is iteratively moved to the centroid of its Voronoi cell until the arrangement is as uniform as possible.
+`Spread` finds a set of compositions spread as evenly as possible across a phase field — for exploratory campaigns where you want coverage rather than a targeted prediction. It uses Lloyd's algorithm: each point is repeatedly moved to the centroid of its Voronoi cell until the arrangement stops changing.
 
 ### Quick start
 
@@ -410,7 +536,7 @@ result = spread.run(
 )
 ```
 
-`run` returns a `SpreadResult` with the suggested compositions. Plot with the usual plotter:
+`run` returns a `SpreadResult` with the suggested compositions. Plot it with the usual plotter:
 
 ```python
 from picip import make_plotter
@@ -419,8 +545,6 @@ pl = make_plotter(pf)
 pl.plot_spread_result(result)
 pl.show(title="Spread compositions")
 ```
-
-`make_plotter` returns the correct plotter automatically — Square for 2-D fields, Cube for 3-D.
 
 ### Known phases
 
@@ -435,23 +559,15 @@ Suggestions cluster in the unexplored region of the phase field, away from the k
 
 ### 3-D phase fields
 
-Works identically with four elements — `make_plotter` picks the Cube automatically:
+Identical code — only the element list changes, and `make_plotter` returns a Cube instead of a Square:
 
 ```python
-pf = Phase_Field()
 pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
-
-spread = Spread(pf)
-result = spread.run(n=10, num_repeats=30)
-
-pl = make_plotter(pf)
-pl.plot_spread_result(result)
-pl.show()
 ```
 
 ### Spread quality — histogram diagnostic
 
-`evaluate_spread` opens a matplotlib figure showing two distributions:
+`evaluate_spread` returns a matplotlib figure showing two distributions. It displays nothing by default — pass `show=True` to open it in a viewer, or `save=<path>` to write a PNG:
 
 - **Worst coverage distance (dwcd):** how far the most isolated grid point is from its nearest suggestion. Smaller = better coverage.
 - **Minimum pairwise distance (dmpd):** the closest pair of suggestions. Larger = better separation.
@@ -459,8 +575,10 @@ pl.show()
 A good solution has similar dwcd and dmpd — the suggestions are well separated *and* they cover the field without leaving large gaps.
 
 ```python
-spread.evaluate_spread(result_few)    # coarse coverage
-spread.evaluate_spread(result_many)   # fine coverage
+spread.evaluate_spread(result_few,  save="coverage_few.png")    # coarse coverage
+spread.evaluate_spread(result_many, save="coverage_many.png")   # fine coverage
+
+# ...or pass show=True instead of save= to open it in your image viewer.
 ```
 
 ### Precursor rounding
@@ -496,7 +614,7 @@ The CSV contains element mole fractions for each suggested composition. If `simp
 
 ---
 
-## 10. Parameter reference
+## 11. Parameter reference
 
 ### `Spread.run`
 
@@ -510,6 +628,15 @@ The CSV contains element mole fractions for each suggested composition. If `simp
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `accuracy` | 2 | Decimal places for precursor formula-unit amounts (normalized to sum to LCM of precursor formula sizes) |
+
+### `Spread.evaluate_spread`
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `show` | False | Open the figure in the system image viewer |
+| `save` | None | Path to write the figure to as a PNG |
+
+Returns the matplotlib figure either way; displays nothing unless asked.
 
 ### `Phase_Field.setup_*`
 
@@ -535,8 +662,8 @@ The CSV contains element mole fractions for each suggested composition. If `simp
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `sample_indexes` | None (all) | int or slice to select a subset of samples |
-| `version` | `'b'` | `'b'` = Dirichlet (default); `'gaussian'` = original PICIP algorithm |
-| `n_l` | 50 | Points along the known simplex |
+| `version` | `'gaussian'` | `'gaussian'` is the original algorithm and works for any dimension and known count. `'dirichlet'` opts into the Dirichlet method, which covers 2-D + 2 knowns and 3-D + 3 knowns; elsewhere it warns and falls back to Gaussian. See section 5. |
+| `n_l` | 50 | Number of ray directions |
 | `n_p` | 50 | Interpolation points per projected ray |
 | `name` | auto | Label for the returned Prediction |
 
@@ -547,6 +674,17 @@ The CSV contains element mole fractions for each suggested composition. If `simp
 | `n` | — | Number of suggestion points |
 | `min_dist` | None | Minimum spacing in constrained-basis units (1.0 = full field width) |
 | `past_samples` | None | Extra exclusion points (default: the prediction's sample compositions) |
+
+### `PICIP.suggest_kmedoids` (experimental)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `n` | — | Number of suggestion points |
+| `past_samples` | None | Compositions to treat as already-measured; batch is chosen to complement them |
+| `exclude_radius` | None | Hard-exclude any omega point within this distance of a past sample |
+| `max_candidates` | 1000 | Restrict the candidate pool to the top-K omega points by posterior probability (speedup; near-lossless) |
+
+> Less tested than `suggest()`. See section 7.
 
 ### `plot_prediction_results`
 
@@ -570,7 +708,124 @@ The CSV contains element mole fractions for each suggested composition. If `simp
 
 ---
 
-## 11. Reference
+## 12. Evaluating PICIP on synthetic phase fields
+
+`picip.evaluation` builds phase fields whose answer is already known, hides one
+phase, and measures how close PICIP gets to it. Use it to check a change, to
+compare inference methods, or to decide how many experiments a question needs.
+
+> **Worked example:** `tutorials/tutorial_evaluation.py` runs the whole workflow
+> end to end — a single one-shot trial in 2-D and in 3-D with its diagnostic
+> figure, then 50 one-shot 3-D trials comparing the Dirichlet and Gaussian
+> methods as paired box plots, and finally the same comparison pooled over a
+> larger population of varied 2-D fields. It takes about 25 seconds and writes
+> four HTML files to `output/`.
+
+Import it explicitly — it is not pulled in by `import picip`, because it caps
+BLAS threads at import time for its parallel trial running:
+
+```python
+from picip.evaluation import (generate_test_phase_field, evaluate,
+                              diagnostic_figure, distance_vs_batch_figure,
+                              save_figure, summarise)
+```
+
+### Generate a field
+
+```python
+field = generate_test_phase_field(dim=3, structure='4c1a', n_internal=5, seed=0)
+print(field.summary())
+```
+
+Dimensionality follows from charge neutrality: `n` elements give
+`constrained_dim = n - 2`. Valid structures are `'2c2a'` and `'3c1a'` in 2-D,
+`'4c1a'` and `'3c2a'` in 3-D. Generated phases are charge-balanced by
+construction. `generate_phase_field_set` produces a list, sweeping phase counts.
+
+### Run one-shot or iterative
+
+```python
+one_shot  = evaluate(field, batch_size=5)                 # propose once
+iterative = evaluate(field, batch_size=3, n_batches=4)    # observe and repeat
+```
+
+Each internal phase is hidden in turn and `num_repeats` trials are run for each.
+A trial draws a composition that produces the unknown phase, reads off what forms
+and in what ratios, corrupts the weights with Dirichlet measurement error, and
+asks PICIP for `batch_size` suggestions.
+
+With `n_batches > 1` every suggestion is observed, added as a further sample, and
+the next batch is drawn from the product of all densities so far — so PICIP
+chooses where to look next. Suggestions that do not produce the unknown phase
+teach nothing about it and are discarded (counted in `BatchResult.n_skipped`).
+
+The score is `TrialResult.min_distance`: the distance from the unknown phase to
+the closest suggestion in the final batch. `summarise(results)` prints the
+per-batch means, and `n_jobs=-1` runs trials across all cores with results
+identical to a serial run.
+
+### Inspect one trial, stage by stage
+
+```python
+results = evaluate(field, batch_size=3, n_batches=4, diagnostic=True)
+save_figure(diagnostic_figure(results[0]), 'trial.html')
+```
+
+One figure, one toggleable layer per stage of the algorithm — identical in 2-D
+and 3-D, so the two can be read side by side:
+
+| Layer | What it shows |
+|-------|---------------|
+| `Dirichlet support on known simplex` | The Dirichlet likelihood over the known simplex — the k1–k2 *line* in 2-D, the k1–k2–k3 *triangle* in 3-D. Belief about the knowns' mixing ratio, before projection |
+| `projected p_density` | The raw ray points carrying that support outward through the sample, before interpolation |
+| `interpolated p_density (sN)` | That sample's density on the omega grid. Hidden on load |
+| `combined p_density` | Product-of-experts density over every sample so far. Hidden on load |
+| `true direction` / `estimated direction` | Lines from the average known through the sample. The true line passes exactly through the unknown phase, so the gap between the two *is* the measurement error made visible |
+| `batch (bN)` | The suggestions returned |
+| `unknown (truth)` | Where the unknown phase actually is |
+
+`diagnostic=True` is off by default because it retains every sample's projected
+ray points. Pass `sample_index` / `batch_index` to draw an earlier round.
+
+### Plot closest hit against batch number
+
+```python
+save_figure(distance_vs_batch_figure(iterative), 'convergence.html')
+```
+
+The closest-hit distance is the distance from the unknown phase to the nearest
+point in a batch. The figure adapts to the run it is given:
+
+- **Iterative runs** get a line of the mean against batch number with a ±1 SE
+  band — a falling curve means the extra rounds pay for themselves. Every trial
+  contributes one value per batch, so the comparison is paired within a trial.
+- **One-shot runs** have a single batch, so there is nothing to plot against.
+  The figure is a **box plot** of the per-trial distances instead — median,
+  quartiles, whiskers, and every trial drawn as a point.
+
+Pass a `dict` to put several runs on the same axes — side-by-side boxes for
+one-shot runs, overlaid lines for iterative ones:
+
+```python
+save_figure(distance_vs_batch_figure({'dirichlet': d_runs, 'gaussian': g_runs}),
+            'comparison.html')
+```
+
+### Saving figures
+
+Figure functions return plotly `Figure` objects and write nothing on their own.
+`save_figure(fig, path)` writes **one self-contained HTML file** with plotly
+inlined — no `plotly.min.js` sidecar to keep beside it. Files are ~5 MB each;
+that is the cost of a single portable artefact.
+
+### Parameter tuning
+
+Sweeps over `predicted_error`, resolution and inference method live in
+`parameter_optimisation.py`, outside the package.
+
+---
+
+## 13. Reference
 
 If you use PICIP in your work, please cite:
 

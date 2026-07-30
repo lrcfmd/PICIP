@@ -551,7 +551,8 @@ class Square:
                     tol=1e-1,
                     marker=None,
                     border_color=None,
-                    border_width=1.5):
+                    border_width=1.5,
+                    visible=True):
         """
         Plot one or more composition points as a 2-D scatter trace.
 
@@ -588,7 +589,7 @@ class Square:
         s : int, optional
             Marker size in pixels. Default 15.
         tol : float, optional
-            Tolerance passed to ``phase_field.check_neutrality``. Default 1e-1.
+            Tolerance passed to ``phase_field.check_composition``. Default 1e-1.
         marker : str or None, optional
             Plotly marker symbol (e.g. ``'diamond'``, ``'cross'``).  ``None``
             uses the default circle.
@@ -596,12 +597,16 @@ class Square:
             Marker border (line) colour.  ``None`` means no border.
         border_width : float, optional
             Marker border width. Default 1.5.
+        visible : bool or str, optional
+            Plotly ``visible`` property.  ``True`` (default) shows the trace
+            immediately; ``'legendonly'`` hides it on load but keeps its legend
+            toggle.
 
         Raises
         ------
         Exception
-            If any point is not charge neutral within ``tol``, or if the point
-            array has an unexpected shape.
+            If the point array has an unexpected shape.  Points that violate
+            the phase field's constraints are reported as warnings, not raised.
         """
         points = np.array(points)
         if points.ndim == 1:
@@ -614,7 +619,7 @@ class Square:
             raise Exception("Constrained basis must be 2D.")
 
         points_s = self.phase_field.convert_to_standard_basis(points)
-        self.phase_field.check_neutrality(points_s)
+        self.phase_field.check_composition(points_s, tol=tol)
 
         formulas = (self.phase_field.get_composition_strings(points) if norm is None
                     else self.phase_field.get_composition_strings(points, norm=norm))
@@ -651,6 +656,7 @@ class Square:
             customdata=customdata,
             hovertemplate=hovertemplate,
             marker=marker_dict,
+            visible=visible,
         )
         self.fig.add_trace(trace)
 
@@ -917,8 +923,10 @@ class Square:
 
         * ``'mean'`` — white fill, amber (``#E8A838``) border; represents the
           posterior mean of the prediction.
-        * ``'sampled'`` — amber fill, dark border; represents points drawn
-          randomly from the posterior distribution.
+        * any other label (e.g. ``'sampled'`` from :meth:`PICIP.suggest` or
+          ``'kmedoid'`` from :meth:`PICIP.suggest_kmedoids`) — amber fill, dark
+          border; one trace per distinct label so every batch-selection
+          strategy renders.
 
         Called automatically by :meth:`plot_prediction_results` and
         :meth:`plot_detail_view` when ``prediction.suggestions`` is not
@@ -934,18 +942,21 @@ class Square:
             Marker size. Default 14.
         """
         labels = np.array(suggestions.labels)
+        pts = suggestions.constrained
 
-        mean_pts = suggestions.constrained[labels == 'mean']
+        mean_pts = pts[labels == 'mean']
         if len(mean_pts):
             self.plot_points(mean_pts, color='white', name='suggestion (mean)',
                              custom_labels=['<b>mean</b>'] * len(mean_pts),
                              s=s, marker='circle',
                              border_color='#E8A838', border_width=3)
 
-        samp_pts = suggestions.constrained[labels == 'sampled']
-        if len(samp_pts):
-            samp_labels = [f'<b>sampled {i+1}</b>' for i in range(len(samp_pts))]
-            self.plot_points(samp_pts, color='#E8A838', name='suggestions (sampled)',
-                             custom_labels=samp_labels, s=s, marker='circle',
+        # Every non-mean label (sampled, kmedoid, ...) as its own amber trace.
+        for lab in dict.fromkeys(labels[labels != 'mean']):
+            lab_pts = pts[labels == lab]
+            lab_labels = [f'<b>{lab} {i+1}</b>' for i in range(len(lab_pts))]
+            self.plot_points(lab_pts, color='#E8A838',
+                             name=f'suggestions ({lab})',
+                             custom_labels=lab_labels, s=s, marker='circle',
                              border_color='#222222', border_width=2)
 

@@ -141,7 +141,7 @@ print(f"4  spinel custom: {pf_spinel.omega.shape[0]} grid points")
 
 pl = make_plotter(pf_spinel)
 pl.plot_points(pf_spinel.omega, color='#888888', name='grid', s=3)
-pl.show(title="4. setup_custom — spinel Li-Fe-Mn-O  (O fixed at 4/7)")
+pl.show(title="4. setup_custom — spinel Li-Fe-Mn-O  (3 cations and 4 anions)")
 # ↑ The three corners are the end-member spinels LiFe₂O₄, LiMn₂O₄, Fe₃O₄.
 #   Every dot satisfies the 3:4 cation:anion stoichiometry.
 

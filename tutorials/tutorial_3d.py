@@ -3,6 +3,7 @@ PICIP Tutorial — 3-D Phase Fields
 ===================================
 Sections:  1. Quick start  2. Display modes  3. Detail view
            4. predicted_error  5. Multiple samples  6. Suggestions
+           7. Charged phase fields (setup_charged)
 Run top to bottom — each section opens a browser figure.
 
 Documentation
@@ -11,6 +12,7 @@ Documentation
   User manual   : ../PICIP_manual.md
   Setup tutorial: tutorial_setup.py
   2-D tutorial  : tutorial_2d.py
+  Evaluation    : tutorial_evaluation.py
 """
 
 from picip import Phase_Field, PICIP, Sample, make_plotter
@@ -19,9 +21,35 @@ from pymatgen.core import Composition
 
 # Phase_Field defines the composition space PICIP operates over.
 # setup_uncharged: grid of all compositions summing to 1, no charge constraint.
-# 4 elements → 3-D tetrahedron — make_plotter returns a Cube automatically.  See tutorial_setup.py for all setup options.
+# 4 elements → 3-D tetrahedron — make_plotter returns a Cube automatically.
+#
+# >>> See `tutorial_setup.py` for the full menu: setup_uncharged / setup_charged /
+#     setup_charge_ranges / setup_custom, n_points/resolution, precursor restriction.
+#     Section 7 below runs this whole workflow again on a CHARGED field and spells
+#     out exactly what has to change. <<<
 pf = Phase_Field()
 pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
+
+# ── Other 3-D phase fields you could use instead (uncomment to try) ───────────
+#   Every option below is 3-D, so the rest of this tutorial runs unchanged.
+#   The rule is: setup_uncharged and setup_charge_ranges give n_elements - 1
+#   dimensions; setup_charged adds a second constraint and gives n_elements - 2.
+#   For 2-D fields see tutorial_2d.py, and tutorial_setup.py for the full menu.
+#
+# # Charged system, fixed oxidation states — 5 elements → 3-D.  Section 7:
+# pf.setup_charged({"Li": +1, "Ni": +3, "Mn": +4, "Co": +3, "O": -2})
+#
+# # Variable oxidation states — 4 elements → 3-D.  Mixed-valence elements take
+# # a [min_charge, max_charge] pair; fixed ones take a scalar:
+# pf.setup_charge_ranges({"Fe": [+2, +3], "Mn": [+2, +4], "Ti": +4, "O": -2})
+#
+# # Restrict to compositions reachable from a specific precursor set:
+# pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"], precursors=["FeO", "MnO2", "TiO2", "CuO"])
+#
+# # Coarser/finer grid (3-D defaults to ~1000 points):
+# pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"], n_points=300)   # faster, lower resolution
+# pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"], n_points=4000)  # slower, higher resolution
+# ───────────────────────────────────────────────────────────────────────────────
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -43,18 +71,40 @@ sample.set_predicted_error(0.3)                      # uncertainty in the weight
 picip = PICIP(pf)
 picip.add_sample(sample)
 
-# Run inference — returns a Prediction object
+# Run inference — returns a Prediction object.
+# version='gaussian' is the default: the original PICIP algorithm from the
+# paper, and the well-tested path for any number of knowns in any dimension.
 pred = picip.run(
-    n_l=50,   # points along the known simplex (more = smoother, diminishing returns >100)
+    n_l=50,   # number of ray directions (more = smoother, diminishing returns >100)
     n_p=10,   # points per projected ray (10–50 sufficient; use more for sharper densities)
 )
 
-# Get suggested next compositions to synthesise
-suggestions = picip.suggest(
-    pred,
-    n=5,          # number of suggestions to return
-    min_dist=0.05 # minimum spacing between suggestions in constrained-basis coordinates
-)
+# ── Opting into the Dirichlet method ──────────────────────────────────────────
+#
+# version='dirichlet' selects the Dirichlet method instead.  Rather than collapsing the
+# knowns to their centroid, it puts a Dirichlet distribution over the mixing
+# ratio of the known phases and projects that through the sample.  In 3-D the
+# support is the k1–k2–k3 triangle, discretised uniformly in solid angle from
+# the sample — the 2-D line method one dimension up.
+#
+# CAVEAT: it is implemented for exactly two configurations —
+#     3-D constrained space with exactly 3 knowns   (this sample)
+#     2-D constrained space with exactly 2 knowns   (see tutorial_2d.py)
+# Ask for it anywhere else — 1 or 2 knowns here, or 4+ in a 3-D field — and
+# PICIP warns that the method is untested there and falls back to Gaussian, so
+# you still get a result, just not the one you asked for.  Watch for:
+#
+#   RuntimeWarning: The Dirichlet method (version='dirichlet') is implemented only for
+#   2-D with 2 known phases and 3-D with 3 known phases ... falling back to the
+#   Gaussian method.
+#
+# This sample has 3 knowns in a 3-D field, so it genuinely takes the Dirichlet
+# path.  Everything downstream works identically; swap `pred_dirichlet` for
+# `pred` below to compare them.
+pred_dirichlet = picip.run(version='dirichlet', n_l=50, n_p=10, name='Dirichlet')
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Suggestions — what to synthesise next — are covered in section 6.
 
 pl = make_plotter(pf)
 pl.plot_prediction_results(pred, plot_average_known=True)
@@ -101,7 +151,9 @@ s_detail.set_predicted_error(0.3)
 
 picip_d = PICIP(pf)
 picip_d.add_sample(s_detail)
-pred_d = picip_d.run(n_l=50, n_p=10)
+# version='dirichlet' so all the layers below are populated — see the note in
+# tutorial_2d.py section 2.
+pred_d = picip_d.run(version='dirichlet', n_l=50, n_p=10)
 
 pl = make_plotter(pf)
 pl.plot_detail_view(pred_d, top_mode='surface', top=0.5)
@@ -170,25 +222,124 @@ pl.show()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 6.  SUGGESTIONS — what to synthesise next
-#     suggest(pred, n) returns n compositions sampled from the probability density.
-#     First = probability-weighted mean.  Remaining are sampled at high-density points.
-#     min_dist: minimum separation between suggestions (in constrained-basis coords,
-#               where 1.0 spans the full phase field).  Prevents clustered suggestions.
+#     Two batch-selection methods, shown side by side below.
+#
+#   a) suggest()          — the routine method.  The first point is the
+#                           probability-weighted mean; the rest are drawn at
+#                           random from the density, with every grid point
+#                           within min_dist of an already-chosen point excluded
+#                           before each draw.  Stochastic: only the 'mean' row
+#                           repeats between runs.
+#
+#   b) suggest_kmedoids() — greedy weighted k-medoids over the grid.  Each pick
+#                           minimises the posterior-weighted expected distance
+#                           to the nearest already-chosen point, so the batch is
+#                           chosen as a whole rather than point by point.
+#                           Deterministic, but less tested — see PICIP_manual.md §7.
 # ══════════════════════════════════════════════════════════════════════════════
 
 picip_s = PICIP(pf)
 picip_s.add_sample(s_detail)
 pred_s = picip_s.run(n_l=50, n_p=10)
 
+# ── 6a. Default method ────────────────────────────────────────────────────────
 suggestions = picip_s.suggest(pred_s, n=5, min_dist=0.05)
 
-print("\n6. Suggested next compositions:")
-for label, row in zip(suggestions.labels, suggestions.standard):
-    print(f"  {label:8s}  Fe={row[0]:.3f}  Mn={row[1]:.3f}  Ti={row[2]:.3f}  Cu={row[3]:.3f}")
+print("\n6a. suggest() — probability-weighted sampling:")
+suggestions.print_table()
 
 suggestions.save("../output/tutorial_suggestions_3d.csv")
 
 pl = make_plotter(pf)
 pl.plot_prediction_results(pred_s, plot_average_known=True)
-pl.show(save="../output/tutorial_output_3d")
+pl.show(title="6a. suggest() — probability-weighted sampling",
+        save="../output/tutorial_output_3d")
 # ↑ Suggestions are auto-plotted.  save= writes an interactive HTML.
+
+# ── 6b. k-medoids alternative ─────────────────────────────────────────────────
+# Overwrites pred_s.suggestions, so 6a is plotted before this runs.
+suggestions_km = picip_s.suggest_kmedoids(pred_s, n=5)
+
+print("\n6b. suggest_kmedoids() — greedy weighted k-medoids:")
+suggestions_km.print_table()
+
+suggestions_km.save("../output/tutorial_suggestions_3d_kmedoids.csv")
+
+pl = make_plotter(pf)
+pl.plot_prediction_results(pred_s, plot_average_known=True)
+pl.show(title="6b. suggest_kmedoids() — deterministic batch",
+        save="../output/tutorial_output_3d_kmedoids")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7.  CHARGED PHASE FIELDS — the same workflow, charge-constrained
+#     Everything above used setup_uncharged.  Real oxide and halide systems are
+#     usually better described by setup_charged, which keeps only the
+#     charge-neutral compositions.
+#
+#     >>> tutorial_setup.py covers all four setup methods in full:
+#         setup_uncharged / setup_charged / setup_charge_ranges / setup_custom,
+#         plus n_points, precursor restriction, and post-setup modifiers. <<<
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── What changes when you switch setup method ─────────────────────────────────
+#
+#   DIMENSIONALITY.  This is the thing that catches people out.  Every setup
+#   applies the sum-to-1 constraint; setup_charged adds one more:
+#
+#       setup_uncharged(n elements)  →  constrained_dim = n - 1
+#       setup_charged(n elements)    →  constrained_dim = n - 2
+#
+#   So to stay 3-D you need FIVE elements once charges are on, not the four
+#   used in sections 1-6.  Fewer elements would drop the field below 3-D and
+#   take you out of this tutorial's scope — tutorial_2d.py covers 2-D.
+#
+#   COMPOSITIONS.  The sample and every known phase must be charge neutral
+#   under the charges you declared, or add_sample raises.  Nothing else about
+#   Sample changes.
+#
+#   NUMBER OF KNOWNS FOR version='dirichlet'.  The Dirichlet method needs
+#   (constrained_dim) knowns, so 3 knowns in a 3-D field — set by the
+#   dimensionality, not by the setup method.  Three knowns work here for the
+#   same reason they did in sections 1-6.
+#
+#   EVERYTHING ELSE IS IDENTICAL.  run(), suggest(), make_plotter() and the
+#   plotting calls are unchanged — the field is still 3-D, so make_plotter
+#   still returns a Cube.
+#
+#   MIXED VALENCE.  If an element takes more than one oxidation state, use
+#   setup_charge_ranges instead.  It grids like setup_uncharged and filters
+#   afterwards, so it gives n_elements - 1 dimensions — 4 elements for 3-D.
+#   Mixed-valence elements take a [min_charge, max_charge] PAIR, not a list of
+#   every allowed state; fixed-charge elements take a scalar:
+#       pf.setup_charge_ranges({"Fe": [+2, +3], "Mn": [+2, +4], "Ti": +4, "O": -2})
+#   See tutorial_setup.py section 3.
+# ──────────────────────────────────────────────────────────────────────────────
+
+pf_charged = Phase_Field()
+pf_charged.setup_charged(
+    {"Li": +1, "Ni": +3, "Mn": +4, "Co": +3, "O": -2},   # 5 elements + charge → 3-D
+    n_points=900,
+)
+print(f"\n7. Charged Li-Ni-Mn-Co-O: constrained_dim={pf_charged.constrained_dim}, "
+      f"{len(pf_charged.omega)} grid points")
+
+# Charge-neutral sample and knowns.  Check the arithmetic if add_sample complains:
+#   LiNiO2   → 1(+1) + 1(+3) + 2(-2) = 0
+#   Li2MnO3  → 2(+1) + 1(+4) + 3(-2) = 0
+sample_c = Sample("s1", "Li4NiCoMnO7")
+sample_c.add_knowns(["LiNiO2", "LiCoO2", "Li2MnO3"])   # 3 knowns in 3-D → Dirichlet available
+sample_c.add_mass_weights([0.35, 0.35, 0.30])
+sample_c.set_predicted_error(0.3)
+
+picip_c = PICIP(pf_charged)
+picip_c.add_sample(sample_c)
+
+pred_c = picip_c.run(n_l=50, n_p=10)                       # Gaussian (default)
+pred_c_dir = picip_c.run(version='dirichlet', n_l=50, n_p=10,      # Dirichlet: 3-D + 3 knowns
+                         name='Dirichlet')
+
+pl = make_plotter(pf_charged)     # returns a Cube — 3-D, same as sections 1-6
+pl.plot_prediction_results(pred_c, plot_average_known=True, p_mode='surface', top=0.5)
+pl.show(title="7. setup_charged — Li-Ni-Mn-Co-O (charge neutral, 3-D)",
+        save="../output/tutorial_charged_3d")
