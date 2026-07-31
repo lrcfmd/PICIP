@@ -8,8 +8,7 @@ custom_con.  Here 4(Li + Fe + Mn) - 3(O) = 0 enforces cation:anion = 3:4, so
 LiFe2O4, LiMn2O4 and Fe3O4 all lie in the field.
 
 Each custom constraint removes one dimension: four elements minus the
-sum-to-one constraint minus this one gives a 2-D field, which with two knowns
-is a supported Dirichlet configuration.
+sum-to-one constraint minus this one gives a 2-D field.
 
 Run with:  python quickstart_custom_constraint.py
 """
@@ -26,11 +25,7 @@ pf = Phase_Field()
 pf.setup_custom(["Li", "Fe", "Mn", "O"], custom_con=spinel, n_points=2000)
 
 # 2. The measured sample.  Compositions off the constraint plane are reported
-#    by PICIP and projected onto it, so keep the 3:4 ratio exact.  The sample
-#    must also lie OFF the line joining the two knowns: if it is exactly a
-#    mixture of them there is no unknown phase to solve for, and the Dirichlet
-#    method rejects it as degenerate.  (LiFe2O4 + LiMn2O4 = LiFeMnO4 exactly,
-#    hence the lower Li content here.)
+#    by PICIP and projected onto it, so keep the 3:4 ratio exact.
 sample = Sample("s1", "LiFe3Mn2O8")
 sample.add_knowns(["LiFe2O4", "LiMn2O4"])
 sample.add_mass_weights([0.4, 0.6])
