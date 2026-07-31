@@ -2,16 +2,10 @@
 PICIP quick start — charged phase field (fixed oxidation states)
 ================================================================
 Ba-Y-Si-O with two known phases.  setup_charged adds charge neutrality on top
-of the sum-to-one constraint, so four elements give a 2-D field — with two
-knowns, a supported Dirichlet configuration.
+of the sum-to-one constraint, so four elements give a 2-D field.
 
 Every composition must be charge neutral under the declared charges.  PICIP
-warns if one is not, and projects it onto the field, so check the arithmetic:
-
-    Ba33Y24Si42O153 → 33(+2) + 24(+3) + 42(+4) + 153(-2) = 66 + 72 + 168 - 306 = 0
-    Ba9Y2Si6O24     →  9(+2) +  2(+3) +  6(+4) +  24(-2) = 18 +  6 +  24 -  48 = 0
-    BaSiO3          →    (+2) +    (+4) +   3(-2)        =  2 +  4 -   6        = 0
-
+warns if one is not, and projects it onto the field/
 Run with:  python quickstart_charged.py
 """
 
