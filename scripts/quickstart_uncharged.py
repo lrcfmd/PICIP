@@ -1,8 +1,7 @@
 """
 PICIP quick start — uncharged phase field
 =========================================
-Fe-Mn-Ti with two known phases.  Three elements and no charge constraint give a
-2-D triangle, which with two knowns is a supported Dirichlet configuration.
+Fe-Mn-Ti with two known phases.
 
 Both batch-selection methods are shown: suggest() (probability-weighted
 sampling, stochastic) and suggest_kmedoids() (deterministic batch).
