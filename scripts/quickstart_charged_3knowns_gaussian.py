@@ -4,7 +4,7 @@ PICIP quick start — three knowns in 2-D, Gaussian method
 The same charged Ba-Y-Si-O field as quickstart_charged.py, but with three
 known phases instead of two.
 
-This is deliberately *not* a Dirichlet configuration.  Dirichlet needs the
+This is deliberately not a supported Dirichlet configuration.  Dirichlet needs the
 known simplex to sit one dimension below the phase field — 2-D + 2 knowns, or
 3-D + 3 knowns.  Three knowns in a 2-D field make a triangle of the same
 dimension as the field, so many mixing ratios share one line through the
