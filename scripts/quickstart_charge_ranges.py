@@ -7,8 +7,7 @@ oxidation state take a [min, max] pair; fixed ones take a scalar.
 There is no charge-neutrality *equality* constraint here — the grid is built as
 if uncharged (so the constrained dimension is N - 1, giving 2-D for three
 elements) and then filtered to compositions that can be balanced by some
-allowed combination of oxidation states.  With two knowns this is a supported
-Dirichlet configuration.
+allowed combination of oxidation states.
 
 Run with:  python quickstart_charge_ranges.py
 """
@@ -19,11 +18,7 @@ from picip import Phase_Field, PICIP, Sample, make_plotter
 pf = Phase_Field()
 pf.setup_charge_ranges({"Fe": [+2, +3], "Mn": [+2, +4], "O": -2}, n_points=2000)
 
-# 2. The measured sample.  Each composition must be balanceable within the
-#    allowed ranges — PICIP warns if it is not.  The sample must also lie OFF
-#    the line joining the two knowns: if it is exactly a mixture of them there
-#    is no unknown phase to solve for, and the Dirichlet method rejects it as
-#    degenerate.  (Fe2O3 + MnO2 = Fe2MnO5 exactly, hence Fe3MnO5 here.)
+# 2. The measured sample.
 sample = Sample("s1", "Fe3MnO5")
 sample.add_knowns(["Fe2O3", "MnO2"])
 sample.add_mass_weights([0.55, 0.45])
