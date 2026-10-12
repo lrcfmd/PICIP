@@ -17,27 +17,24 @@ from picip import Phase_Field, PICIP, Sample, make_plotter
 
 # ── shared fixtures ────────────────────────────────────────────────────────────
 
-def _pf_2d():
+def _pf(species_list):
+    """Sets up a phase field with `setup_uncharged` and returns it"""
     pf = Phase_Field()
-    pf.setup_uncharged(["Fe", "Mn", "Ti"])
+    pf.setup_uncharged(species_list)
     return pf
+
+def _pf_2d():
+    """2D phase field (Fe-Mn-Ti)"""
+    return _pf(["Fe", "Mn", "Ti"])
 
 def _pf_3d():
-    pf = Phase_Field()
-    pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
-    return pf
+    """3D phase field (Fe-Mn-Ti-Cu)"""
+    return _pf(["Fe", "Mn", "Ti", "Cu"])
 
-def _sample_2d(name, err=0.3):
-    s = Sample(name, "Fe2Mn4Ti4")
-    s.add_knowns(["FeMn", "FeTi"])
-    s.add_molar_weights([0.3, 0.7])
-    s.set_predicted_error(err)
-    return s
-
-def _sample_3d(name, err=0.3):
-    s = Sample(name, "Fe2Mn2Ti2Cu4")
-    s.add_knowns(["FeMn", "FeTi", "FeCu"])
-    s.add_molar_weights([0.25, 0.35, 0.40])
+def _sample(name, composition, knowns, weights, err=0.3):
+    s = Sample(name, composition)
+    s.add_knowns(knowns)
+    s.add_molar_weights(weights)
     s.set_predicted_error(err)
     return s
 
@@ -323,27 +320,79 @@ def _run_2sample_3d(pf, s_a, s_b, label, n_l=30, n_p=10):
 # ── automated tests ────────────────────────────────────────────────────────────
 
 def test_single_sample_2d():
-    """Single 2-D sample runs and produces a normalised probability map."""
-    pf = _pf_2d()
-    s = _sample_2d("s1")
-    picip = PICIP(pf)
-    picip.add_sample(s)
-    pred = picip.run()
-    assert pred.prob_density.sum() > 0, "Probability map is all zero"
-    assert abs(pred.prob_density.sum() - 1.0) < 1e-6, "Probability map not normalised"
-    print("PASS  test_single_sample_2d")
+    """Check molar-weight atom balance and prediction normalisation."""
+    for weights in [[1.0, 1.0], [0.3, 0.7]]:
+        pf = _pf(["Ti", "Ni", "Al"])
+        s = _sample("s1",
+            composition="Ti2NiAl3",
+            knowns=["TiNi", "TiAl3"],
+            weights=weights,
+        )
+        picip = PICIP(pf)
+        picip.add_sample(s)
+
+        # w1 FeMn + w2 FeTi2, in Fe-Mn-Ti order.
+        w1, w2 = weights
+        expected = np.array([w1 + w2, w1, 3 * w2])
+        expected /= expected.sum()
+        actual = pf.convert_to_standard_basis(s.average_k)
+        np.testing.assert_allclose(
+            actual, expected, rtol=1e-7, atol=1e-9,
+            err_msg=f"Incorrect atom balance for molar weights {weights}",
+        )
+
+        pred = picip.run()
+        assert pred.prob_density.sum() > 0, f"Probability map for weights {weights} is all zero"
+        assert abs(pred.prob_density.sum() - 1.0) < 1e-6, f"Probability map for weights {weights} not normalised"
+        print("PASS  test_single_sample_2d")
 
 
 def test_single_sample_3d():
-    """Single 3-D sample runs and produces a normalised probability map."""
-    pf = _pf_3d()
-    s = _sample_3d("s1")
+    """Check molar-weight atom balance and prediction normalisation."""
+    for weights in ((1.0, 1.0, 1.0), (0.25, 0.35, 0.40)):
+        pf = _pf(["Ti", "Ni", "Fe", "Al"])
+        s = _sample("s1",
+            composition="Ti33.33Fe13.33Ni10.67Al42.67",
+            knowns=["TiNi", "TiFe2", "TiAl3"],
+            weights=weights
+        )
+        picip = PICIP(pf)
+        picip.add_sample(s)
+
+        # w1 TiNi + w2 TiFe2 + w3 TiAl3, in Ti-Ni-Fe-Al order.
+        w1, w2, w3 = weights
+        expected = np.array([w1 + w2 + w3, w1, 2 * w2, 3 * w3])
+        expected /= expected.sum()
+        actual = pf.convert_to_standard_basis(s.average_k)
+        np.testing.assert_allclose(
+            actual, expected, rtol=1e-7, atol=1e-9,
+            err_msg=f"Incorrect atom balance for molar weights {weights}",
+        )
+
+        pred = picip.run(n_l=30, n_p=10)
+        assert pred.prob_density.sum() > 0
+        assert abs(pred.prob_density.sum() - 1.0) < 1e-6
+        print("PASS  test_single_sample_3d")
+
+
+def test_mass_weights_atom_balance():
+    """Masses for one mole of each phase must preserve atom balance."""
+    pf = _pf(["Ti", "Ni", "Al"])
+    s = Sample("s1", "Ti2NiAl3")
+    s.add_knowns(["TiNi", "TiAl3"])
+    s.add_mass_weights([float(k.weight) for k in s.knowns])
+
     picip = PICIP(pf)
     picip.add_sample(s)
-    pred = picip.run(n_l=30, n_p=10)
-    assert pred.prob_density.sum() > 0
-    assert abs(pred.prob_density.sum() - 1.0) < 1e-6
-    print("PASS  test_single_sample_3d")
+
+    # One mole FeMn + one mole FeTi2 → Fe:Mn:Ti = 2:1:3.
+    expected = np.array([2.0, 1.0, 3.0]) / 5.0
+    actual = pf.convert_to_standard_basis(s.average_k)
+    np.testing.assert_allclose(
+        actual, expected, rtol=1e-7, atol=1e-9,
+        err_msg="Incorrect atom balance for mass weights",
+    )
+    print("PASS  test_mass_weights_atom_balance")
 
 
 def test_multi_sample_nonzero_intersection():
