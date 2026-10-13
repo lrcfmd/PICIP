@@ -227,12 +227,12 @@ class Sample:
 
     def add_mass_weights(self, mass_weights):
         """
-        Set known-phase weights from mass-fraction quantities (primary method).
+        Set known-phase weights from relative mass quantities (primary method).
 
         This is the primary weight-setting method and the one most commonly
         used in practice, since Rietveld refinement reports mass fractions.
-        Internally converts to mole fractions (weights) by dividing each
-        mass weight by the phase's molar mass.
+        Internally converts to relative amounts of substance (rel_amounts_of_substance)
+        by dividing each mass weight by the phase's molar mass.
 
         Parameters
         ----------
@@ -248,8 +248,8 @@ class Sample:
         if any(w <= 0 for w in mass_weights):
             raise ValueError("All mass_weights must be positive.")
         molar_masses = np.array([known.weight for known in self.knowns])
-        weights = np.array(mass_weights) / molar_masses   # moles = mass / M
-        self.weights = weights / sum(weights)
+        rel_amounts_of_substance = np.array(mass_weights) / molar_masses   # moles = mass / M
+        self.weights = rel_amounts_of_substance / sum(rel_amounts_of_substance)
         self.mass_weights = np.array(mass_weights) / sum(mass_weights)
 
     def set_predicted_error(self, predicted_error, prior=1e-4):
