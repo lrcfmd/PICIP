@@ -122,7 +122,7 @@ class Sample:
     knowns : list of pymatgen.core.Composition or None
         Co-existing known phases.  Set by add_knowns().
     weights : ndarray or None
-        Normalised mole fractions of the known phases.
+        Mole fractions of the known phases.
         Set by add_mass_weights() or add_molar_weights().
     mass_weights : ndarray or None
         Normalised mass fractions of the known phases.
