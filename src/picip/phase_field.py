@@ -487,6 +487,7 @@ class Phase_Field:
         # Use print_basis=True once, capture the output, and pass it back via
         # precalculated_basis to get reproducible grid layouts.
         if precalculated_basis is None:
+            # Rows: basis vectors for constrained space, columns: elements
             x = np.empty((self.constrained_dim, dim))
             A = normal_vectors.T
             for i in range(self.constrained_dim):
@@ -727,6 +728,8 @@ class Phase_Field:
             norma = np.sum(point, axis=1)
             point = (point.T / norma).T
             point = point - self.contained_point
+
+            # Row-wise dot products (sums over elements)
             point = np.einsum("ij,...j->...i", self.basis, point)
             return point
 

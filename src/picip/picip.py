@@ -125,7 +125,7 @@ class Sample:
         Mole fractions of the known phases.
         Set by add_mass_weights() or add_molar_weights().
     mass_weights : ndarray or None
-        Normalised mass fractions of the known phases.
+        Mass fractions of the known phases.
         Set by add_mass_weights() or add_molar_weights().
     comp_constrained : ndarray or None
         Sample composition in constrained basis.  Set by PICIP.add_sample().
@@ -470,11 +470,17 @@ class PICIP:
                 raise Exception(
                     f"Known phase {k} contains elements not in phase field: {sorted(extra)}"
                 )
+
+        # Rows: known phase; columns: element
         sample.knowns_standard=np.array([[k.get_atomic_fraction(el) for el in self.phase_field.elements] for k in sample.knowns])
         for k, k_s in zip(sample.knowns, sample.knowns_standard):
             self._warn_if_outside_field(k_s, f"known {k.reduced_formula}")
 
+        # Convert to array of constrained-space vectors
+        # Rows: knowns; columns: constrained-space basis vectors
         sample.knowns_constrained=self.phase_field.convert_to_constrained_basis(sample.knowns_standard)
+
+        # Column-wise dot products giving average k as a row vector
         sample.average_k=np.sum(sample.weights[:,np.newaxis]*sample.knowns_constrained, axis=0)
 
         if sample.predicted_error is None:
