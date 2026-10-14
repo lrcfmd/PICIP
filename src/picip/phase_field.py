@@ -291,6 +291,7 @@ class Phase_Field:
         ----------
         charge_vector : array_like of shape (n,), optional
             Formal charge for each of the `n` elements.
+        n_points : int, takes precedence over `resolution`
         resolution : int, optional, default=30
             Points are spaced `1/resolution` apart in each direction.
         precalculated_basis : ndarray of shape (n, m), optional
