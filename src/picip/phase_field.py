@@ -17,6 +17,16 @@ import os
 
 class Phase_Field:
 
+    # Array of normal vectors for constraints
+    # Constraint coefficients by which composition is dot-producted to equal
+    # some targets based on `normal_vectors_b` (`constraint_failures`)
+    # Also used as constraint coefficients in `_find_vertices_and_edges`
+    normal_vectors: np.ndarray
+
+    # Used only as a target for dot product of composition and some coefficients
+    # in `constraint_failures`
+    normal_vectors_b: np.ndarray #
+
     def _init(self):
         """Initialise empty element/dimension bookkeeping before a setup_* call populates the field."""
         self.elements = None #The elements in the phase field
