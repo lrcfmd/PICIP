@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import numpy as np
 import multiprocessing as mp
 import random
@@ -26,6 +28,11 @@ class Phase_Field:
     # Used only as a target for dot product of composition and some coefficients
     # in `constraint_failures`
     normal_vectors_b: np.ndarray #
+    
+    @dataclass(frozen=True)
+    class _SeparatedCharges:
+        fixed: list[int]
+        ranges: list[list[int]]
 
     def _init(self):
         """Initialise empty element/dimension bookkeeping before a setup_* call populates the field."""
@@ -438,7 +445,35 @@ class Phase_Field:
             Whether the species at each position in the ``species_dict`` has a charge range.
         """
         return [isinstance(x, list) for x in species_dict.values()]
+    
+    def _seperate_charges_set_charge_bounds(self, has_range):
+        """
+        Separate charges in ``self.species_dict`` into fixed charges and ranges of charges.
 
+        Parameters
+        ----------
+        has_range : list[bool]
+            Whether the species at each position in the ``species_dict`` has a charge range
+
+        Returns
+        -------
+        self._SeparatedCharges
+            Object containing a list of fixed charges and a list of separated ones
+        """
+        ranges = [
+            x for x, y in zip(self.species_dict.values(), has_range) if y
+        ]
+        fixed = [
+            x if not y else 0
+            for x, y in zip(self.species_dict.values(), has_range)
+        ]
+        self.charge_max = np.array(fixed, dtype=float)
+        self.charge_max[has_range] = np.array(ranges)[:, 1]
+        self.charge_min = np.array(fixed, dtype=float)
+        self.charge_min[has_range] = np.array(ranges)[:, 0]
+
+        return self._SeparatedCharges(fixed=fixed, ranges=ranges)
+        
 
     def _create_omega_constrained(
             self, precalculated_basis=None, print_basis=False, add_corners_to_knowns=False):
@@ -531,13 +566,7 @@ class Phase_Field:
         # Pre-compute charge bounds before vertex-finding so the LP can include them
         _charge_ranges = hasattr(self, 'charge_ranges') and self.charge_ranges
         if _charge_ranges:
-            has_range = self._has_range(self.species_dict)
-            ranges_list = [x for x, y in zip(self.species_dict.values(), has_range) if y]
-            fixed = [x if not y else 0 for x, y in zip(self.species_dict.values(), has_range)]
-            self.charge_max = np.array(fixed, dtype=float)
-            self.charge_max[has_range] = np.array(ranges_list)[:, 1]
-            self.charge_min = np.array(fixed, dtype=float)
-            self.charge_min[has_range] = np.array(ranges_list)[:, 0]
+            self._seperate_charges_set_charge_bounds(self._has_range(self.species_dict))
 
         self._find_vertices_and_edges()
         vertices = self.corners
@@ -649,22 +678,12 @@ class Phase_Field:
             raise Exception(
                 'Error, to get charge extremes at least one species must have '
                 + 'a range of charges')
-        ranges = [
-            x for x, y in zip(self.species_dict.values(), has_range) if y
-        ]
-        fixed = [
-            x if not y else 0
-            for x, y in zip(self.species_dict.values(), has_range)
-        ]
-        self.charge_max = np.array(fixed, dtype=float)
-        self.charge_max[has_range] = np.array(ranges)[:, 1]
-        self.charge_min = np.array(fixed, dtype=float)
-        self.charge_min[has_range] = np.array(ranges)[:, 0]
+        separated_charges = self._seperate_charges_set_charge_bounds(has_range)
         self.constrain_charge_omega(charge_scalar)
         constraints = []
-        combinations = self.cartesian(ranges)
+        combinations = self.cartesian(separated_charges.ranges)
         for c in combinations:
-            f = np.array(fixed)
+            f = np.array(separated_charges.fixed)
             f[has_range] = c
             constraints.append(f)
         self.charge_extreme_constraints = constraints
