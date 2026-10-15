@@ -422,6 +422,24 @@ class Phase_Field:
         x = np.linalg.lstsq(A.T, b, rcond=None)[0]
         return x / np.linalg.norm(x)
 
+
+    def _has_range(self, species_dict):
+        """
+        Determines if each species in ``species_dict`` has a range of possible charges.
+
+        Parameters
+        ----------
+        species_dict : dict[]
+            Mapping of element symbol (str) to its charge specification. See `setup_charge_ranges`.
+
+        Returns
+        -------
+        list[bool]
+            Whether the species at each position in the ``species_dict`` has a charge range.
+        """
+        return [isinstance(x, list) for x in species_dict.values()]
+
+
     def _create_omega_constrained(
             self, precalculated_basis=None, print_basis=False, add_corners_to_knowns=False):
         """
@@ -513,7 +531,7 @@ class Phase_Field:
         # Pre-compute charge bounds before vertex-finding so the LP can include them
         _charge_ranges = hasattr(self, 'charge_ranges') and self.charge_ranges
         if _charge_ranges:
-            has_range = [isinstance(x, list) for x in self.species_dict.values()]
+            has_range = self._has_range(self.species_dict)
             ranges_list = [x for x, y in zip(self.species_dict.values(), has_range) if y]
             fixed = [x if not y else 0 for x, y in zip(self.species_dict.values(), has_range)]
             self.charge_max = np.array(fixed, dtype=float)
@@ -626,7 +644,7 @@ class Phase_Field:
     def set_charge_extreme_constraints(self, charge_scalar=0):
         """Compute and store the extreme-charge half-plane constraints for a charge-range field, then filter omega."""
         #this function finds the two hyperplanes corresponding to max and min charges
-        has_range = [isinstance(x, list) for x in self.species_dict.values()]
+        has_range = self._has_range(self.species_dict)
         if not any(has_range):
             raise Exception(
                 'Error, to get charge extremes at least one species must have '
