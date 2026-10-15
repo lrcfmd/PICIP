@@ -248,7 +248,9 @@ class Sample:
         if any(w <= 0 for w in mass_weights):
             raise ValueError("All mass_weights must be positive.")
         molar_masses = np.array([known.weight for known in self.knowns])
+        # This is moles of formula units
         rel_amounts_of_substance = np.array(mass_weights) / molar_masses   # moles = mass / M
+        # Moles of formula units in phase i / Sum over j moles of formula units in phase j
         self.weights = rel_amounts_of_substance / sum(rel_amounts_of_substance)
         self.mass_weights = np.array(mass_weights) / sum(mass_weights)
 
@@ -472,6 +474,7 @@ class PICIP:
                 )
 
         # Rows: known phase; columns: element
+        # Fractions of  atoms in phase i which are element j
         sample.knowns_standard=np.array([[k.get_atomic_fraction(el) for el in self.phase_field.elements] for k in sample.knowns])
         for k, k_s in zip(sample.knowns, sample.knowns_standard):
             self._warn_if_outside_field(k_s, f"known {k.reduced_formula}")
