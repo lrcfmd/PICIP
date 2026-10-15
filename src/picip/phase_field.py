@@ -237,7 +237,6 @@ class Phase_Field:
         has_ranges=False
         charge_vector=None
         if isinstance(species, dict):
-            has_ranges=False
             for value in species.values():
                 if isinstance(value, list):
                     has_ranges=True
