@@ -199,6 +199,21 @@ class Sample:
             raise ValueError("knowns must not be empty.")
         self.knowns=[Composition(k) for k in knowns]
 
+    def _atom_counts(self):
+        """
+        Count atoms in each known phase.
+
+        Returns
+        -------
+        np.ndarray : Numpy array of shape (n_knowns,)
+            Total number of atoms per formula unit for each known phase.
+        """
+        return np.fromiter(
+            (k.num_atoms for k in self.knowns),
+            dtype=np.float64,
+            count=len(self.knowns)
+        )
+
     def add_molar_weights(self, mol_weights):
         """
         Set known-phase weights from molar (mole-fraction) quantities.
