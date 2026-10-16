@@ -601,6 +601,104 @@ def test_3d_custom_reduce():
     print("PASS  test_3d_custom_reduce")
 
 
+def test_average_k_with_molar_weights():
+    pf = Phase_Field()
+    pf.setup_uncharged(["Ti", "Ni", "Al"])
+
+    knowns = ["TiNi", "TiAl3"]
+    mol_weights = np.array([2.0, 1.0], dtype=float)
+
+    # Two moles of TiNi and one mole of TiAl3 give 3 Ti, 2 Ni, 3 Al atoms total.
+    expected_standard = np.array([3.0, 2.0, 3.0], dtype=float) / 8.0
+    sample = Sample(
+        "s1",
+        Composition({"Ti": expected_standard[0], "Ni": expected_standard[1], "Al": expected_standard[2]}),
+    )
+    sample.add_knowns(knowns)
+    sample.add_molar_weights(mol_weights)
+    sample.set_predicted_error(0.3)
+
+    picip = PICIP(pf)
+    picip.add_sample(sample)
+
+    expected_k = pf.convert_to_constrained_basis(expected_standard)
+
+    np.testing.assert_allclose(
+        sample.weights,
+        mol_weights / mol_weights.sum(),
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="Molar weights were not normalized to formula-unit mole fractions",
+    )
+    np.testing.assert_allclose(
+        sample.average_k,
+        expected_k,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k is incorrect for add_molar_weights()",
+    )
+    np.testing.assert_allclose(
+        pf.convert_to_standard_basis(sample.average_k),
+        expected_standard,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k does not conserve the atom basis for add_molar_weights()",
+    )
+
+
+def test_average_k_with_mass_weights():
+    pf = Phase_Field()
+    pf.setup_uncharged(["Ti", "Ni", "Al"])
+
+    knowns = ["TiNi", "TiAl3"]
+    mol_weights = np.array([2.0, 1.0], dtype=float)
+    mass_weights = mol_weights * np.array([Composition(k).weight for k in knowns], dtype=float)
+
+    # Same conserved atom balance as in the molar-weight test.
+    expected_standard = np.array([3.0, 2.0, 3.0], dtype=float) / 8.0
+    sample = Sample(
+        "s1",
+        Composition({"Ti": expected_standard[0], "Ni": expected_standard[1], "Al": expected_standard[2]}),
+    )
+    sample.add_knowns(knowns)
+    sample.add_mass_weights(mass_weights)
+    sample.set_predicted_error(0.3)
+
+    picip = PICIP(pf)
+    picip.add_sample(sample)
+
+    expected_k = pf.convert_to_constrained_basis(expected_standard)
+
+    np.testing.assert_allclose(
+        sample.weights,
+        mol_weights / mol_weights.sum(),
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="Mass weights were not converted to formula-unit mole fractions correctly",
+    )
+    np.testing.assert_allclose(
+        sample.mass_weights,
+        mass_weights / mass_weights.sum(),
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="Mass weights were not normalized correctly",
+    )
+    np.testing.assert_allclose(
+        sample.average_k,
+        expected_k,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k is incorrect for add_mass_weights()",
+    )
+    np.testing.assert_allclose(
+        pf.convert_to_standard_basis(sample.average_k),
+        expected_standard,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k does not conserve the atom basis for add_mass_weights()",
+    )
+
+
 def run_automated():
     print("\n── Automated tests ───────────────────────────────────────")
     test_single_sample_2d()
