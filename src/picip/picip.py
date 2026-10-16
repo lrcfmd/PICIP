@@ -234,7 +234,7 @@ class Sample:
             )
         if any(w <= 0 for w in mol_weights):
             raise ValueError("All mol_weights must be positive.")
-        self.weights=np.array(mol_weights)/sum(mol_weights)
+        self.weights=np.array(mol_weights) * self._atom_counts() /sum(mol_weights)
         molar_masses=np.array([known.weight for known in self.knowns])
         # Derive mass fractions from mole amounts × molar mass
         mass_weights=molar_masses*np.array(mol_weights)
@@ -263,8 +263,9 @@ class Sample:
         if any(w <= 0 for w in mass_weights):
             raise ValueError("All mass_weights must be positive.")
         molar_masses = np.array([known.weight for known in self.knowns])
-        # This is moles of formula units
-        rel_amounts_of_substance = np.array(mass_weights) / molar_masses   # moles = mass / M
+        # This is moles of individual atoms
+        # moles = mass / M
+        rel_amounts_of_substance = np.array(mass_weights) * self._atom_counts() / molar_masses
         # Moles of formula units in phase i / Sum over j moles of formula units in phase j
         self.weights = rel_amounts_of_substance / sum(rel_amounts_of_substance)
         self.mass_weights = np.array(mass_weights) / sum(mass_weights)
