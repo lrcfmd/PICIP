@@ -27,7 +27,7 @@ class Phase_Field:
 
     # Used only as a target for dot product of composition and some coefficients
     # in `constraint_failures`
-    normal_vectors_b: np.ndarray #
+    normal_vectors_b: np.ndarray
     
     @dataclass(frozen=True)
     class _SeparatedCharges:
