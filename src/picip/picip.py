@@ -234,7 +234,8 @@ class Sample:
             )
         if any(w <= 0 for w in mol_weights):
             raise ValueError("All mol_weights must be positive.")
-        self.weights=np.array(mol_weights) * self._atom_counts() /sum(mol_weights)
+        scaled_weights = np.array(mol_weights) * self._atom_counts()
+        self.weights= scaled_weights / sum(scaled_weights)
         molar_masses=np.array([known.weight for known in self.knowns])
         # Derive mass fractions from mole amounts × molar mass
         mass_weights=molar_masses*np.array(mol_weights)
