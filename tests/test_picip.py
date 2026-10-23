@@ -375,6 +375,17 @@ def test_single_sample_3d():
         print("PASS  test_single_sample_3d")
 
 
+def test_weights_normalised():
+    pf = _pf_3d()
+    s = _sample("s1")
+    picip = PICIP(pf)
+    picip.add_sample(s)
+    np.testing.assert_allclose(
+        np.sum(s.weights), 1.0, rtol=1e-7, atol=1e-9,
+        err_msg="Known phase weights not normalised",
+    )
+
+
 def test_mass_weights_atom_balance():
     """Masses for one mole of each phase must preserve atom balance."""
     pf = _pf(["Ti", "Ni", "Al"])
