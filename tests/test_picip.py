@@ -407,7 +407,6 @@ def test_mass_weights_atom_balance():
     picip = PICIP(pf)
     picip.add_sample(s)
 
-    # One mole FeMn + one mole FeTi2 → Fe:Mn:Ti = 2:1:3.
     expected = np.array([2.0, 1.0, 3.0]) / 5.0
     actual = pf.convert_to_standard_basis(s.average_k)
     np.testing.assert_allclose(
