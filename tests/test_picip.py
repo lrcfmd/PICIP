@@ -31,7 +31,7 @@ def _pf_3d():
     """3D phase field (Fe-Mn-Ti-Cu)"""
     return _pf(["Fe", "Mn", "Ti", "Cu"])
 
-def _sample(name, composition, knowns, weights, err=0.3):
+def _sample(name, composition="Fe2Mn2Ti2Cu4", knowns=("FeMn", "FeTi", "FeCu"), weights=(0.10, 0.67, 5.02), err=0.3):
     s = Sample(name, composition)
     s.add_knowns(knowns)
     s.add_molar_weights(weights)
