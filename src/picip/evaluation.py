@@ -160,7 +160,7 @@ class TestPhaseField:
 
     def _to_constrained(self, point):
         """Coerce a query point (constrained vec, standard vec, or Composition)
-        to a constrained-basis coordinate."""
+        to a constrained-basis coordinate using `Phase_Field.convert_to_constrained_basis`."""
         if hasattr(point, 'get_atomic_fraction'):          # pymatgen Composition
             std = np.array([point.get_atomic_fraction(el)
                             for el in self.phase_field.elements], dtype=float)
@@ -200,13 +200,13 @@ class TestPhaseField:
         if s_idx < 0:
             return None
         verts = [int(v) for v in self.triangulation.simplices[s_idx]]
-        weights = _barycentric(self.triangulation, s_idx, point_c)
+        weights = _barycentric(self.triangulation, s_idx, point_c)   # these weights are phase fractions
         return FormingPhases(
             indices=verts,
             points_constrained=self.points_constrained[verts],
             formulas=[self.point_formulas[v] for v in verts],
             labels=[str(self.point_labels[v]) for v in verts],
-            weights=weights,
+            phase_fractions=weights,
             simplex_index=s_idx)
 
     def random_sample_point(self, seed=None):
@@ -224,12 +224,12 @@ class FormingPhases:
     points_constrained: np.ndarray  # (dim+1, dim)
     formulas: list                  # len dim+1
     labels: list                    # 'corner'/'internal'/'edge'/'face'
-    weights: np.ndarray             # barycentric, len dim+1, sums to 1
+    phase_fractions: np.ndarray     # barycentric weights, len dim+1, sums to 1
     simplex_index: int
 
     def __repr__(self):
         parts = ', '.join(f'{f}:{w:.3f}'
-                          for f, w in zip(self.formulas, self.weights))
+                          for f, w in zip(self.formulas, self.phase_fractions))
         return f'FormingPhases({parts})'
 
 
@@ -770,7 +770,7 @@ def _observe(tpf, unknown_idx, sample_c, experimental_error, predicted_error,
     order = list(forming.indices)
     keep = [i for i in range(len(order)) if order[i] != unknown_idx]
     k_idx = [order[i] for i in keep]
-    molar = forming.weights[keep]
+    molar = forming.phase_fractions[keep]
     molar = molar / molar.sum()
     comps = list(pf.convert_standard_to_pymatgen(tpf.points_standard[k_idx]))
 
