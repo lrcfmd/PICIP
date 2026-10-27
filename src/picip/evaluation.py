@@ -455,7 +455,7 @@ def generate_test_phase_field(dim=2, structure=None, *, n_internal=5, n_edge=1,
     # 3. Generate random phases in constrained space (neutral by construction)
     pts_c, labels = [], []
 
-    # interior — convex combination of all corners with positive phase_fractions
+    # interior — convex combination of all corners with positive weights
     for _ in range(n_internal):
         w = rng.dirichlet(np.ones(n_corners))
         pts_c.append(w @ corners_c)
@@ -679,9 +679,9 @@ class DiagnosticData:
     individual_densities: list          # per-sample density over omega
     combined_densities: list            # cumulative product after each sample
     batches: list                       # BatchResult list, mirrors TrialResult
-    known_molar: list                   # true molar phase_fractions, per sample
-    mass_true: list                     # true mass phase_fractions, per sample
-    mass_noisy: list                    # measured (errored) phase_fractions, per sample
+    known_molar: list                   # true molar weights, per sample
+    mass_true: list                     # true mass weights, per sample
+    mass_noisy: list                    # measured (errored) weights, per sample
     unknown_index: int
 
 
