@@ -407,7 +407,7 @@ def test_mass_weights_atom_balance():
     picip = PICIP(pf)
     picip.add_sample(s)
 
-    expected = np.array([2.0, 1.0, 3.0]) / 5.0
+    expected = np.array([2.0, 1.0, 3.0]) / 6.0
     actual = pf.convert_to_standard_basis(s.average_k)
     np.testing.assert_allclose(
         actual, expected, rtol=1e-7, atol=1e-9,
