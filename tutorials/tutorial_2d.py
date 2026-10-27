@@ -65,7 +65,7 @@ sample = Sample(
 )
 sample.add_knowns(["FeMn", "FeTi"])          # known co-existing phases
 sample.add_mass_weights([0.3, 0.7])          # mass fractions of each known phase (e.g. from Rietveld)
-sample.set_predicted_error(0.3)              # uncertainty in the weights (0=precise, 1=rough)
+sample.set_predicted_error(0.3)              # uncertainty in the phase_fractions (0=precise, 1=rough)
 
 # Initialise PICIP and add the sample
 picip = PICIP(pf)
@@ -123,7 +123,7 @@ pl.show()
 # 2.  DETAIL VIEW — algorithm layers
 #
 #   a) Support assumption  — probability placed on the FeMn–FeTi line,
-#                            peaking at the supplied mass weights.
+#                            peaking at the supplied mass phase_fractions.
 #   b) Projected distribution — rays cast from each support point through
 #                               the sample to the far boundary.
 #   c) Interpolated distribution — final probability density in phase field space.
@@ -147,7 +147,7 @@ pl.show()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 3.  EFFECT OF predicted_error
-#     Low (0.05) = trust the weights precisely.  High (0.6) = weights uncertain.
+#     Low (0.05) = trust the phase_fractions precisely.  High (0.6) = phase_fractions uncertain.
 #     Typical starting range: 0.1–0.3.
 # ══════════════════════════════════════════════════════════════════════════════
 

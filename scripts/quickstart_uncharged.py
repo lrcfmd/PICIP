@@ -19,7 +19,7 @@ pf.setup_uncharged(["Fe", "Mn", "Ti"])
 sample = Sample("s1", "Fe2Mn4Ti4")
 sample.add_knowns(["FeMn", "FeTi"])
 sample.add_mass_weights([0.3, 0.7])     # e.g. from Rietveld refinement
-sample.set_predicted_error(0.3)         # 0 = precise weights, 1 = rough
+sample.set_predicted_error(0.3)         # 0 = precise phase_fractions, 1 = rough
 
 # 3. Infer where the unknown phase sits.
 picip = PICIP(pf)

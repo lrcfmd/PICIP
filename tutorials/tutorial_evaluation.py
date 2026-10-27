@@ -104,7 +104,7 @@ print(field_2d.summary())
 #   - reads off which phases form there and in what molar ratio
 #   - converts those to mass fractions and corrupts them with Dirichlet noise
 #     of size `experimental_error` — i.e. simulates the Rietveld measurement
-#   - hands the errored weights to PICIP and asks for `batch_size` suggestions
+#   - hands the errored phase_fractions to PICIP and asks for `batch_size` suggestions
 #
 # version='dirichlet' is the Dirichlet method; 'gaussian' is the legacy one (§3 below).
 # diagnostic=True keeps the per-sample stage-by-stage arrays that
@@ -115,7 +115,7 @@ trial_2d = evaluate(
     version='dirichlet',              # Dirichlet
     batch_size=5,             # suggestions per batch
     n_batches=1,              # ONE SHOT.  >1 makes it iterative — see §12 of the manual
-    experimental_error=0.10,  # measurement noise on the observed weights
+    experimental_error=0.10,  # measurement noise on the observed phase_fractions
     num_repeats=1,            # trials per unknown phase
     diagnostic=True,          # retain what diagnostic_figure() needs
     seed=0,

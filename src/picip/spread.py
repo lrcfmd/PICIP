@@ -262,8 +262,8 @@ class Spread:
     def simplify_to_precursors(self, result, accuracy=2):
         """Snap each suggested composition to the closest achievable precursor ratio.
 
-        Uses non-negative least squares (NNLS) to find the precursor weights
-        that best reproduce each suggested composition, converts the weights to
+        Uses non-negative least squares (NNLS) to find the precursor phase_fractions
+        that best reproduce each suggested composition, converts the phase_fractions to
         formula-unit amounts scaled to the LCM of the precursor formula sizes,
         rounds to ``accuracy`` decimal places, and recomputes the actual
         composition the rounded amounts produce.
@@ -302,7 +302,7 @@ class Spread:
             if residual > hull_tol:
                 outside_hull.append((i, float(residual)))
 
-            # Convert NNLS atom-fraction weights to formula-unit amounts.
+            # Convert NNLS atom-fraction phase_fractions to formula-unit amounts.
             # x[i] is proportional to the number of atoms from precursor i,
             # so formula units ∝ x[i] / precursors_size[i].
             q  = x / pre_s

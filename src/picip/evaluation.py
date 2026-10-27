@@ -455,7 +455,7 @@ def generate_test_phase_field(dim=2, structure=None, *, n_internal=5, n_edge=1,
     # 3. Generate random phases in constrained space (neutral by construction)
     pts_c, labels = [], []
 
-    # interior — convex combination of all corners with positive weights
+    # interior — convex combination of all corners with positive phase_fractions
     for _ in range(n_internal):
         w = rng.dirichlet(np.ones(n_corners))
         pts_c.append(w @ corners_c)
@@ -679,16 +679,16 @@ class DiagnosticData:
     individual_densities: list          # per-sample density over omega
     combined_densities: list            # cumulative product after each sample
     batches: list                       # BatchResult list, mirrors TrialResult
-    known_molar: list                   # true molar weights, per sample
-    mass_true: list                     # true mass weights, per sample
-    mass_noisy: list                    # measured (errored) weights, per sample
+    known_molar: list                   # true molar phase_fractions, per sample
+    mass_true: list                     # true mass phase_fractions, per sample
+    mass_noisy: list                    # measured (errored) phase_fractions, per sample
     unknown_index: int
 
 
 # ── measurement model ────────────────────────────────────────────────────────
 
 def _mass_from_molar(molar_weights, compositions):
-    """Convert molar mixing weights to normalised mass weights."""
+    """Convert molar mixing phase_fractions to normalised mass phase_fractions."""
     M = np.array([c.weight for c in compositions], dtype=float)
     m = M * np.asarray(molar_weights, dtype=float)
     s = m.sum()
@@ -705,9 +705,9 @@ def _molar_from_mass(mass_weights, compositions):
 
 def _dirichlet_noise(mass_true, experimental_error, rng, floor=1e-3):
     """
-    Perturb true mass weights by a Dirichlet whose concentration is set by
+    Perturb true mass phase_fractions by a Dirichlet whose concentration is set by
     ``experimental_error`` (smaller error → tighter → less noise), matching
-    PICIP's own ``alpha = weights / predicted_error`` convention.
+    PICIP's own ``alpha = phase_fractions / predicted_error`` convention.
     """
     p = np.maximum(np.asarray(mass_true, dtype=float), floor)
     p = p / p.sum()
@@ -753,8 +753,8 @@ def _observe(tpf, unknown_idx, sample_c, experimental_error, predicted_error,
     Turn one composition into a PICIP :class:`~picip.picip.Sample`.
 
     Reads off the phases that form at ``sample_c`` via the fixed triangulation,
-    hides ``unknown_idx``, converts the remaining phases' molar mixing weights
-    to mass weights, and corrupts them with Dirichlet measurement error — the
+    hides ``unknown_idx``, converts the remaining phases' molar mixing phase_fractions
+    to mass phase_fractions, and corrupts them with Dirichlet measurement error — the
     same information a real experiment would hand over.
 
     Returns ``(sample, info)``, or ``(None, reason)`` when the composition does
@@ -965,7 +965,7 @@ def evaluate(fields, *, version='dirichlet', batch_size=5, n_batches=1,
     For every phase field, every internal phase is treated as the unknown, and
     ``num_repeats`` independent trials are run for each.  A trial draws a random
     composition that produces the unknown, reads off the phases that form and
-    their ratios, corrupts the observed weights with Dirichlet measurement
+    their ratios, corrupts the observed phase_fractions with Dirichlet measurement
     error, hands them to PICIP, and asks for a batch of ``batch_size``
     suggestions.  The score is the distance from the closest suggestion to the
     true position of the unknown phase.
@@ -990,7 +990,7 @@ def evaluate(fields, *, version='dirichlet', batch_size=5, n_batches=1,
     n_batches : int, default 1
         Rounds of suggestion.  ``1`` is a one-shot run; ``> 1`` is iterative.
     experimental_error : float, default 0.1
-        Dirichlet error applied to the observed weights (smaller → tighter
+        Dirichlet error applied to the observed phase_fractions (smaller → tighter
         measurement).  Used as PICIP's ``predicted_error`` unless the latter is
         given explicitly.
     predicted_error : float, optional
@@ -1150,7 +1150,7 @@ def diagnostic_figure(trial, sample_index=-1, batch_index=-1, title=None):
         Hidden on load.  Absent for a single-sample trial.
     ``true direction`` / ``estimated direction``
         Lines from the average known through the sample to the boundary, built
-        from the noiseless molar weights and from the measured (errored) weights
+        from the noiseless molar phase_fractions and from the measured (errored) phase_fractions
         respectively.  The true line passes exactly through the unknown phase, so
         the gap between the two lines *is* the measurement error, made visible.
     ``batch (bN)``
@@ -1223,10 +1223,10 @@ def diagnostic_figure(trial, sample_index=-1, batch_index=-1, title=None):
         pl.plot_p(d.combined_densities[n], s=sz['density'],
                   name=f'combined p_density ({tag})', visible='legendonly')
 
-    # ── stage 4: the direction the measured weights imply ───────────────────
+    # ── stage 4: the direction the measured phase_fractions imply ───────────────────
     # sample = w_u * unknown + (1 - w_u) * c, where c is the average known on
     # the simplex, so the ray c → sample passes through the unknown exactly when
-    # c is built from the noiseless molar weights.
+    # c is built from the noiseless molar phase_fractions.
     comps = list(pf.convert_standard_to_pymatgen(
         np.asarray(s.knowns_standard)))
     for weights, colour, label in (

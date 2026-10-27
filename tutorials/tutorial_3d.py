@@ -65,7 +65,7 @@ sample = Sample(
 )
 sample.add_knowns(["FeMn", "FeTi", "FeCu"])          # known co-existing phases
 sample.add_mass_weights([0.25, 0.35, 0.40])          # mass fractions of each known phase (e.g. from Rietveld)
-sample.set_predicted_error(0.3)                      # uncertainty in the weights (0=precise, 1=rough)
+sample.set_predicted_error(0.3)                      # uncertainty in the phase_fractions (0=precise, 1=rough)
 
 # Initialise PICIP and add the sample
 picip = PICIP(pf)
@@ -137,7 +137,7 @@ pl.show(title="2. Display modes — toggle in legend")
 # 3.  DETAIL VIEW — algorithm layers
 #
 #   a) Support assumption  — probability placed on the FeMn–FeTi–FeCu triangle,
-#                            peaking at the supplied mass weights.
+#                            peaking at the supplied mass phase_fractions.
 #   b) Projected distribution — rays cast from each support point through
 #                               the sample to the far boundary.
 #   c) Interpolated distribution — final probability density in phase field space.
@@ -162,7 +162,7 @@ pl.show()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 4.  EFFECT OF predicted_error
-#     Low (0.05) = trust the weights precisely.  High (0.6) = weights uncertain.
+#     Low (0.05) = trust the phase_fractions precisely.  High (0.6) = phase_fractions uncertain.
 #     Typical starting range: 0.1–0.3.
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -183,7 +183,7 @@ pl.plot_prediction_results(preds_err[1], plot_samples=False, visible='legendonly
 pl.plot_prediction_results(preds_err[2], plot_samples=False, visible='legendonly')
 pl.show(title="4. Effect of predicted_error — toggle in legend")
 # ↑ σ=0.05 on load (tight cloud).  Toggle σ=0.3 and σ=0.6 in the legend.
-#   Higher σ = weights less trusted = broader probability cloud.
+#   Higher σ = phase_fractions less trusted = broader probability cloud.
 
 
 # ══════════════════════════════════════════════════════════════════════════════
