@@ -22,3 +22,11 @@ def mass_fraction_to_phase_fraction(
         atom_counts: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
     raise NotImplementedError
+
+
+def phase_fraction_to_mass_fraction(
+        phase_fractions: npt.NDArray[np.float64],
+        molar_masses: npt.NDArray[np.float64],
+        atom_counts: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    raise NotImplementedError
