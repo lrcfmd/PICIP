@@ -13,6 +13,7 @@ import numpy as np
 from pymatgen.core import Composition
 
 from picip import Phase_Field, PICIP, Sample, make_plotter
+from picip.utils import compositions
 
 
 # ── shared fixtures ────────────────────────────────────────────────────────────
@@ -717,6 +718,48 @@ def test_average_k_with_mass_weights():
         rtol=1e-7,
         atol=1e-9,
         err_msg="average_k does not conserve the atom basis for add_mass_weights()",
+    )
+
+
+def test_atom_counts_returns_total_atoms_per_composition():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+        Composition("C6H12O6"),
+    ]
+
+    result = compositions.atom_counts(composition_list)
+
+    expected = np.array([5.0, 2.0, 24.0], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.compositions.atom_counts` counts atoms incorrectly",
+    )
+
+
+def test_molar_masses_returns_total_molar_mass_per_composition():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+        Composition("C6H12O6"),
+    ]
+
+    result = compositions.molar_masses(composition_list)
+
+    expected = np.array([159.688, 22.940, 180.156], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=0,
+        atol=0.005,
+        err_msg="`utils.compositions.molar_masses` computes molar masses incorrectly",
     )
 
 
