@@ -788,7 +788,7 @@ def test_compositions_to_standard_basis():
     ]
     elements = ["Fe", "O", "Li"]
 
-    result = composition.compositions_to_standard_basis(composition_list, elements)
+    result = composition.composition_to_standard_basis(composition_list, elements)
 
     expected = np.array(
         [
