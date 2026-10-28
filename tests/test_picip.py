@@ -781,6 +781,34 @@ def test_composition_to_standard_basis():
     )
 
 
+def test_compositions_to_standard_basis():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+    ]
+    elements = ["Fe", "O", "Li"]
+
+    result = composition.compositions_to_standard_basis(composition_list, elements)
+
+    expected = np.array(
+        [
+            [0.4, 0.6, 0.0],
+            [0.0, 0.5, 0.5],
+        ],
+        dtype=np.float64,
+    )
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.compositions_to_standard_basis` computes concentrations for a list of "
+                "compositions incorrectly",
+    )
+
+
 def run_automated():
     print("\n── Automated tests ───────────────────────────────────────")
     test_single_sample_2d()
