@@ -38,3 +38,10 @@ def composition_to_standard_basis(composition: KnownsLike, elements: Collection[
     """
 
     raise NotImplementedError
+
+
+def formula_unit_fraction_to_mass_fraction(
+        phase_fractions: npt.NDArray[np.float64],
+        molar_masses: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    raise NotImplementedError
