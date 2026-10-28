@@ -18,5 +18,6 @@ def molar_masses(compositions: Collection[Composition]) -> npt.NDArray[np.float6
     )
 
 
-def to_standard_basis(composition: Composition, elements: Iterable[str]) -> npt.NDArray[np.float64]:
+def composition_to_standard_basis(composition: Composition, elements: Iterable[str]) -> npt.NDArray[np.float64]:
     raise NotImplementedError
+
