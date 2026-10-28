@@ -13,7 +13,7 @@ import numpy as np
 from pymatgen.core import Composition
 
 from picip import Phase_Field, PICIP, Sample, make_plotter
-from picip.utils import compositions
+from picip.utils import composition
 
 
 # ── shared fixtures ────────────────────────────────────────────────────────────
@@ -728,7 +728,7 @@ def test_atom_counts_returns_total_atoms_per_composition():
         Composition("C6H12O6"),
     ]
 
-    result = compositions.atom_counts(composition_list)
+    result = composition.atom_counts(composition_list)
 
     expected = np.array([5.0, 2.0, 24.0], dtype=np.float64)
     assert isinstance(result, np.ndarray)
@@ -738,7 +738,7 @@ def test_atom_counts_returns_total_atoms_per_composition():
         expected,
         rtol=1e-7,
         atol=1e-9,
-        err_msg="`utils.compositions.atom_counts` counts atoms incorrectly",
+        err_msg="`utils.composition.atom_counts` counts atoms incorrectly",
     )
 
 
@@ -749,7 +749,7 @@ def test_molar_masses_returns_total_molar_mass_per_composition():
         Composition("C6H12O6"),
     ]
 
-    result = compositions.molar_masses(composition_list)
+    result = composition.molar_masses(composition_list)
 
     expected = np.array([159.688, 22.940, 180.156], dtype=np.float64)
     assert isinstance(result, np.ndarray)
@@ -759,7 +759,7 @@ def test_molar_masses_returns_total_molar_mass_per_composition():
         expected,
         rtol=0,
         atol=0.005,
-        err_msg="`utils.compositions.molar_masses` computes molar masses incorrectly",
+        err_msg="`utils.composition.molar_masses` computes molar masses incorrectly",
     )
 
 
