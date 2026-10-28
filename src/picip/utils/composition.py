@@ -7,11 +7,11 @@ import numpy.typing as npt
 from pymatgen.core import Composition
 
 
-def atom_counts(compositions: Iterable[Composition]) -> npt.NDArray[np.float64]:
+def atom_count(compositions: Iterable[Composition]) -> npt.NDArray[np.float64]:
     raise NotImplementedError
 
 
-def molar_masses(compositions: Collection[Composition]) -> npt.NDArray[np.float64]:
+def molar_mass(compositions: Collection[Composition]) -> npt.NDArray[np.float64]:
     return np.fromiter(
         (composition.weight for composition in compositions),
         dtype=np.float64,

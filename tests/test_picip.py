@@ -728,7 +728,7 @@ def test_atom_counts_returns_total_atoms_per_composition():
         Composition("C6H12O6"),
     ]
 
-    result = composition.atom_counts(composition_list)
+    result = composition.atom_count(composition_list)
 
     expected = np.array([5.0, 2.0, 24.0], dtype=np.float64)
     assert isinstance(result, np.ndarray)
@@ -749,7 +749,7 @@ def test_molar_masses_returns_total_molar_mass_per_composition():
         Composition("C6H12O6"),
     ]
 
-    result = composition.molar_masses(composition_list)
+    result = composition.molar_mass(composition_list)
 
     expected = np.array([159.688, 22.940, 180.156], dtype=np.float64)
     assert isinstance(result, np.ndarray)
