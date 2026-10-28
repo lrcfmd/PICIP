@@ -763,6 +763,24 @@ def test_molar_masses_returns_total_molar_mass_per_composition():
     )
 
 
+def test_to_standard_basis():
+    example_composition = Composition("Fe2O3")
+    elements = ["Fe", "O"]
+
+    result = composition.to_standard_basis(example_composition, elements)
+
+    expected = np.array([0.4, 0.6], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.to_standard_basis` computes concentrations in a single phase incorrectly",
+    )
+
+
 def run_automated():
     print("\n── Automated tests ───────────────────────────────────────")
     test_single_sample_2d()
