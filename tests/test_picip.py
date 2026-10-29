@@ -792,22 +792,22 @@ def test_mole_calculations(subtests):
         (
             "rel_n_formula_units_to_mass_fraction",
             (rel_n_formula_units, molar_masses),
-            rel_masses,
+            rel_masses / 150,
         ),
         (
             "rel_n_formula_units_to_phase_fraction",
             (rel_n_formula_units, atom_counts),
-            rel_total_phase_atom_counts,
+            rel_total_phase_atom_counts / 20,
         ),
         (
             "rel_mass_to_phase_fraction",
             (rel_masses, molar_masses, atom_counts),
-            rel_total_phase_atom_counts,
+            rel_total_phase_atom_counts / 20,
         ),
         (
             "rel_total_phase_atom_count_to_mass_fraction",
             (rel_total_phase_atom_counts, molar_masses, atom_counts),
-            rel_masses,
+            rel_masses / 150,
         ),
     ]
 
