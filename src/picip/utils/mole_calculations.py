@@ -2,31 +2,36 @@ import numpy as np
 import numpy.typing as npt
 
 
-def formula_unit_fraction_to_mass_fraction(
-        phase_fractions: npt.NDArray[np.float64],
+def rel_n_formula_units_to_mass_fraction(
+        rel_n_formula_units: npt.NDArray[np.float64],
         molar_masses: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
-    return (rel_masses := phase_fractions * molar_masses) / rel_masses.sum()
+    """Converts relative numbers of formula units (e.g. normalised formula-unit fractions) to mass fractions."""
+    return (rel_masses := rel_n_formula_units * molar_masses) / rel_masses.sum()
 
 
-def formula_unit_fraction_to_phase_fraction(
-        formula_unit_fractions: npt.NDArray[np.float64],
+def rel_n_formula_units_to_phase_fraction(
+        rel_n_formula_units: npt.NDArray[np.float64],
         atom_counts: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
-    return (rel_atom_counts := formula_unit_fractions * atom_counts) / rel_atom_counts.sum()
+    """Converts relative numbers of formula units (e.g. normalised formula-unit fractions) to phase fractions."""
+    return (rel_atom_counts := rel_n_formula_units * atom_counts) / rel_atom_counts.sum()
 
 
-def mass_fraction_to_phase_fraction(
-        mass_fractions: npt.NDArray[np.float64],
+def rel_mass_to_phase_fraction(
+        rel_masses: npt.NDArray[np.float64],
         molar_masses: npt.NDArray[np.float64],
         atom_counts: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
-    return (rel_atom_counts := mass_fractions / molar_masses * atom_counts) / rel_atom_counts.sum()
+    """Converts relative phase masses (e.g. normalised mass fractions) to phase fractions."""
+    return (rel_atom_counts := rel_masses / molar_masses * atom_counts) / rel_atom_counts.sum()
 
 
-def phase_fraction_to_mass_fraction(
-        phase_fractions: npt.NDArray[np.float64],
+def rel_total_phase_atom_count_to_mass_fraction(
+        rel_total_phase_atom_counts: npt.NDArray[np.float64],
         molar_masses: npt.NDArray[np.float64],
         atom_counts: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
-    return (mass := phase_fractions * molar_masses / atom_counts) / mass.sum()
+    """Converts relative total atom counts of each phase in whatever `phase_fractions` as a whole
+     represents (e.g. normalised phase fractions) to mass fractions."""
+    return (mass := rel_total_phase_atom_counts * molar_masses / atom_counts) / mass.sum()
