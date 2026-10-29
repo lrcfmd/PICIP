@@ -13,6 +13,7 @@ import numpy as np
 from pymatgen.core import Composition
 
 from picip import Phase_Field, PICIP, Sample, make_plotter
+from picip.utils import composition, mole_calculations
 
 
 # ── shared fixtures ────────────────────────────────────────────────────────────
@@ -717,6 +718,140 @@ def test_average_k_with_mass_weights():
         rtol=1e-7,
         atol=1e-9,
         err_msg="average_k does not conserve the atom basis for add_mass_weights()",
+    )
+
+
+def test_atom_counts_returns_total_atoms_per_composition():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+        Composition("C6H12O6"),
+    ]
+
+    result = composition.atom_count(composition_list)
+
+    expected = np.array([5.0, 2.0, 24.0], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.atom_counts` counts atoms incorrectly",
+    )
+
+
+def test_molar_masses_returns_total_molar_mass_per_composition():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+        Composition("C6H12O6"),
+    ]
+
+    result = composition.molar_mass(composition_list)
+
+    expected = np.array([159.688, 22.940, 180.156], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=0,
+        atol=0.005,
+        err_msg="`utils.composition.molar_masses` computes molar masses incorrectly",
+    )
+
+
+def test_composition_to_standard_basis():
+    example_composition = Composition("Fe2O3")
+    elements = ["Fe", "O"]
+
+    result = composition.composition_to_standard_basis(example_composition, elements)
+
+    expected = np.array([0.4, 0.6], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.composition_to_standard_basis` computes concentrations in a single phase incorrectly",
+    )
+
+
+def test_mole_calculations(subtests):
+    rel_n_formula_units = np.array([2., 1.], dtype=np.float64)
+    rel_total_phase_atom_counts = np.array([10., 10.], dtype=np.float64)
+    rel_masses = np.array([50., 100.], dtype=np.float64)
+    molar_masses = np.array([10.0, 40.0], dtype=np.float64)
+    atom_counts = np.array([2.0, 4.0], dtype=np.float64)
+
+    cases = [
+        (
+            "rel_n_formula_units_to_mass_fraction",
+            (rel_n_formula_units, molar_masses),
+            rel_masses / 150,
+        ),
+        (
+            "rel_n_formula_units_to_phase_fraction",
+            (rel_n_formula_units, atom_counts),
+            rel_total_phase_atom_counts / 20,
+        ),
+        (
+            "rel_mass_to_phase_fraction",
+            (rel_masses, molar_masses, atom_counts),
+            rel_total_phase_atom_counts / 20,
+        ),
+        (
+            "rel_total_phase_atom_count_to_mass_fraction",
+            (rel_total_phase_atom_counts, molar_masses, atom_counts),
+            rel_masses / 150,
+        ),
+    ]
+
+    for method_name, args, expected in cases:
+        with subtests.test(method=method_name):
+            result = getattr(mole_calculations, method_name)(*args)
+
+            assert isinstance(result, np.ndarray)
+            assert result.dtype == np.dtype(np.float64)
+            assert result.shape == expected.shape
+            np.testing.assert_allclose(
+                result,
+                expected,
+                rtol=1e-7,
+                atol=1e-9,
+                err_msg=f"{method_name} returned incorrect fractions",
+            )
+
+
+def test_compositions_to_standard_basis():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+    ]
+    elements = ["Fe", "O", "Li"]
+
+    result = composition.composition_to_standard_basis(composition_list, elements)
+
+    expected = np.array(
+        [
+            [0.4, 0.6, 0.0],
+            [0.0, 0.5, 0.5],
+        ],
+        dtype=np.float64,
+    )
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.compositions_to_standard_basis` computes concentrations for a list of "
+                "compositions incorrectly",
     )
 
 

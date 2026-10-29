@@ -17,6 +17,9 @@ from math import dist as deu
 import time
 import os
 
+from .utils.composition import composition_to_standard_basis
+
+
 class Phase_Field:
 
     # Array of normal vectors for constraints
@@ -913,7 +916,7 @@ class Phase_Field:
         knowns_standard = []
         knowns_label = []
         for k in knowns:
-            ks = [k.get_atomic_fraction(e) for e in self.elements]
+            ks = composition_to_standard_basis(k, self.elements)
             failures = self.constraint_failures(ks, tol=tol)
             if failures:
                 # Warn but keep it: dropping the phase silently left callers
@@ -1190,9 +1193,7 @@ class Phase_Field:
         ndarray
             Composition in standard representation.
         """
-        c = Composition(composition)
-        s = [c.get_atomic_fraction(el) for el in self.elements]
-        return s
+        return composition_to_standard_basis(Composition(composition), self.elements)
 
     def constraint_failures(self, point, tol=0.01):
         """
