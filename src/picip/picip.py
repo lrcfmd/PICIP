@@ -50,7 +50,8 @@ import pandas as pd
 from picip import utils
 from picip.exceptions import ZeroPException
 from picip.utils.composition import composition_to_standard_basis, atom_count, molar_mass
-from picip.utils.mole_calculations import phase_fraction_to_mass_fraction
+from picip.utils.mole_calculations import phase_fraction_to_mass_fraction, formula_unit_fraction_to_phase_fraction, \
+    formula_unit_fraction_to_mass_fraction
 
 
 def _requires_samples(method):
@@ -234,12 +235,8 @@ class Sample:
             )
         if any(w <= 0 for w in mol_weights):
             raise ValueError("All mol_weights must be positive.")
-        scaled_weights = np.array(mol_weights) * self._atom_counts()
-        self.phase_fractions= scaled_weights / sum(scaled_weights)
-        molar_masses=np.array([known.weight for known in self.knowns])
-        # Derive mass fractions from mole amounts × molar mass
-        mass_weights=molar_masses*np.array(mol_weights)
-        self.mass_weights=mass_weights/sum(mass_weights)
+        self.phase_fractions = formula_unit_fraction_to_phase_fraction(mol_weights, self._atom_counts())
+        self.mass_weights = formula_unit_fraction_to_mass_fraction(mol_weights, molar_mass(self.knowns))
 
     def add_mass_weights(self, mass_weights):
         """
