@@ -13,7 +13,7 @@ def formula_unit_fraction_to_phase_fraction(
         formula_unit_fractions: npt.NDArray[np.float64],
         atom_counts: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
-    raise NotImplementedError
+    return (rel_atom_counts := formula_unit_fractions * atom_counts) / rel_atom_counts.sum()
 
 
 def mass_fraction_to_phase_fraction(
