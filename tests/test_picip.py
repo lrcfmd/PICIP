@@ -675,11 +675,13 @@ def test_average_k_with_mass_weights():
     pf.setup_uncharged(["Ti", "Ni", "Al"])
 
     knowns = ["TiNi", "TiAl3"]
-    mol_weights = np.array([2.0, 1.0], dtype=float)
-    mass_weights = mol_weights * np.array([Composition(k).weight for k in knowns], dtype=float)
+    formula_unit_fractions = np.array([6.0, 1.0], dtype=float)
+
+    expected_phase_fractions = np.array([0.75, 0.25], dtype=float)
+    mass_weights = formula_unit_fractions * np.array([Composition(k).weight for k in knowns], dtype=float)
 
     # Same conserved atom balance as in the molar-weight test.
-    expected_standard = np.array([3.0, 2.0, 3.0], dtype=float) / 8.0
+    expected_standard = np.array([7.0, 6.0, 3.0], dtype=float) / 16.0
     sample = Sample(
         "s1",
         Composition({"Ti": expected_standard[0], "Ni": expected_standard[1], "Al": expected_standard[2]}),
@@ -695,10 +697,10 @@ def test_average_k_with_mass_weights():
 
     np.testing.assert_allclose(
         sample.phase_fractions,
-        mol_weights / mol_weights.sum(),
+        expected_phase_fractions / expected_phase_fractions.sum(),
         rtol=1e-7,
         atol=1e-9,
-        err_msg="Mass phase_fractions were not converted to formula-unit mole fractions correctly",
+        err_msg="Mass phase_fractions were not converted to phase fractions correctly",
     )
     np.testing.assert_allclose(
         sample.mass_weights,
