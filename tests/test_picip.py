@@ -628,16 +628,18 @@ def test_average_k_with_molar_weights():
     pf.setup_uncharged(["Ti", "Ni", "Al"])
 
     knowns = ["TiNi", "TiAl3"]
-    mol_weights = np.array([2.0, 1.0], dtype=float)
+    formula_unit_fractions = np.array([6.0, 1.0], dtype=float)
+
+    expected_phase_fractions = [0.75, 0.25]
 
     # Two moles of TiNi and one mole of TiAl3 give 3 Ti, 2 Ni, 3 Al atoms total.
-    expected_standard = np.array([3.0, 2.0, 3.0], dtype=float) / 8.0
+    expected_standard = np.array([7.0, 6.0, 3.0], dtype=float) / 16.0
     sample = Sample(
         "s1",
         Composition({"Ti": expected_standard[0], "Ni": expected_standard[1], "Al": expected_standard[2]}),
     )
     sample.add_knowns(knowns)
-    sample.add_molar_weights(mol_weights)
+    sample.add_molar_weights(formula_unit_fractions)
     sample.set_predicted_error(0.3)
 
     picip = PICIP(pf)
@@ -647,7 +649,7 @@ def test_average_k_with_molar_weights():
 
     np.testing.assert_allclose(
         sample.phase_fractions,
-        mol_weights / mol_weights.sum(),
+        expected_phase_fractions,
         rtol=1e-7,
         atol=1e-9,
         err_msg="Molar phase_fractions were not normalized to formula-unit mole fractions",
