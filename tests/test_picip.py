@@ -145,7 +145,7 @@ def _fixture_custom_reduce():
 
 def _compose_3d(K1, K2, K3, U, ra, rb):
     """Compute two crossing-ray sample compositions from 3 knowns + unknown U.
-    ra/rb: relative molar phase_fractions [w1,w2,w3] for samples a/b (normalized to 0.8; wU=0.2).
+    ra/rb: relative molar weights [w1,w2,w3] for samples a/b (normalized to 0.8; wU=0.2).
     """
     wa = np.array(ra, float); wa = wa / wa.sum() * 0.8
     wb = np.array(rb, float); wb = wb / wb.sum() * 0.8
@@ -339,12 +339,12 @@ def test_single_sample_2d():
         actual = pf.convert_to_standard_basis(s.average_k)
         np.testing.assert_allclose(
             actual, expected, rtol=1e-7, atol=1e-9,
-            err_msg=f"Incorrect atom balance for molar phase_fractions {weights}",
+            err_msg=f"Incorrect atom balance for formula-unit fraction weights {weights}",
         )
 
         pred = picip.run()
-        assert pred.prob_density.sum() > 0, f"Probability map for phase_fractions {weights} is all zero"
-        assert abs(pred.prob_density.sum() - 1.0) < 1e-6, f"Probability map for phase_fractions {weights} not normalised"
+        assert pred.prob_density.sum() > 0, f"Probability map for formula-unit fractions {weights} is all zero"
+        assert abs(pred.prob_density.sum() - 1.0) < 1e-6, f"Probability map for formula-unit fractions {weights} not normalised"
         print("PASS  test_single_sample_2d")
 
 
@@ -367,7 +367,7 @@ def test_single_sample_3d():
         actual = pf.convert_to_standard_basis(s.average_k)
         np.testing.assert_allclose(
             actual, expected, rtol=1e-7, atol=1e-9,
-            err_msg=f"Incorrect atom balance for molar phase_fractions {weights}",
+            err_msg=f"Incorrect atom balance for formula-unit fractions {weights}",
         )
 
         pred = picip.run(n_l=30, n_p=10)
@@ -383,7 +383,7 @@ def test_weights_normalised():
     picip.add_sample(s)
     np.testing.assert_allclose(
         np.sum(s.phase_fractions), 1.0, rtol=1e-7, atol=1e-9,
-        err_msg="Known phase phase_fractions not normalised",
+        err_msg="Known phase phase fractions not normalised",
     )
 
 
@@ -394,7 +394,7 @@ def test_mass_weights_normalised():
     picip.add_sample(s)
     np.testing.assert_allclose(
         np.sum(s.mass_weights), 1.0, rtol=1e-7, atol=1e-9,
-        err_msg="Known phase mass phase_fractions not normalised",
+        err_msg="Known phase mass fractions not normalised",
     )
 
 
@@ -412,7 +412,7 @@ def test_mass_weights_atom_balance():
     actual = pf.convert_to_standard_basis(s.average_k)
     np.testing.assert_allclose(
         actual, expected, rtol=1e-7, atol=1e-9,
-        err_msg="Incorrect atom balance for mass phase_fractions",
+        err_msg="Incorrect atom balance for mass weights",
     )
     print("PASS  test_mass_weights_atom_balance")
 

@@ -198,7 +198,7 @@ class Sample:
         ----------
         knowns : list of str
             Phase compositions in any format recognised by pymatgen, e.g.
-            ``['MgS', 'Al2S3']``.  Order must match the phase_fractions supplied to
+            ``['MgS', 'Al2S3']``.  Order must match the weights supplied to
             add_mass_weights() or add_molar_weights().
         """
         if not knowns:
@@ -218,7 +218,7 @@ class Sample:
 
     def add_molar_weights(self, mol_weights):
         """
-        Set known-phase phase_fractions from molar (mole-fraction) quantities.
+        Set known-phase phase_fractions from formula-unit fraction quantities.
 
         Use add_mass_weights() instead if your phase fractions come from Rietveld
         refinement (which reports mass fractions directly).
@@ -720,7 +720,7 @@ class PICIP:
         Greedy weighted k-medoids over the omega grid: at each step pick the
         omega point that minimises the posterior-weighted expected distance
         to the *closest* already-chosen point.  Equivalent to greedy facility
-        location with the posterior as customer phase_fractions — a 2-approximation
+        location with the posterior as customer weights — a 2-approximation
         to the optimal batch under this objective.
 
         Parameters
@@ -979,7 +979,7 @@ class PICIP:
         Discretises the k1-k2-k3 triangle into points that are uniform in solid
         angle from the sample (Möller-Trumbore, via
         :meth:`_discretise_known_simplex_3d`), evaluates the Dirichlet likelihood
-        of the observed mass phase_fractions at each triangle point, then projects that
+        of the observed mass weights at each triangle point, then projects that
         PDF onto omega with the shared :meth:`_project_known_simplex`.
 
         Falls back to the Gaussian method if the triangle discretisation yields
@@ -997,7 +997,7 @@ class PICIP:
             return self._compute_p_gaussian(sample, n_l, n_p)
 
         # Dirichlet likelihood at each triangle point (mirrors the 2-D loop):
-        # floor the barycentric phase_fractions, convert mole→mass, form the Dirichlet
+        # floor the barycentric weights, convert mole→mass, form the Dirichlet
         # concentration alpha = mass / predicted_error, evaluate at the observed
         # mass phase_fractions.
         dirichlet_likelihood = []
