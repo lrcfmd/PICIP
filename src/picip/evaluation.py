@@ -160,7 +160,7 @@ class TestPhaseField:
 
     def _to_constrained(self, point):
         """Coerce a query point (constrained vec, standard vec, or Composition)
-        to a constrained-basis coordinate."""
+        to a constrained-basis coordinate using `Phase_Field.convert_to_constrained_basis`."""
         if hasattr(point, 'get_atomic_fraction'):          # pymatgen Composition
             std = np.array([point.get_atomic_fraction(el)
                             for el in self.phase_field.elements], dtype=float)
@@ -200,13 +200,13 @@ class TestPhaseField:
         if s_idx < 0:
             return None
         verts = [int(v) for v in self.triangulation.simplices[s_idx]]
-        weights = _barycentric(self.triangulation, s_idx, point_c)
+        weights = _barycentric(self.triangulation, s_idx, point_c)   # these weights are phase fractions
         return FormingPhases(
             indices=verts,
             points_constrained=self.points_constrained[verts],
             formulas=[self.point_formulas[v] for v in verts],
             labels=[str(self.point_labels[v]) for v in verts],
-            weights=weights,
+            phase_fractions=weights,
             simplex_index=s_idx)
 
     def random_sample_point(self, seed=None):
@@ -224,12 +224,12 @@ class FormingPhases:
     points_constrained: np.ndarray  # (dim+1, dim)
     formulas: list                  # len dim+1
     labels: list                    # 'corner'/'internal'/'edge'/'face'
-    weights: np.ndarray             # barycentric, len dim+1, sums to 1
+    phase_fractions: np.ndarray     # barycentric weights, len dim+1, sums to 1
     simplex_index: int
 
     def __repr__(self):
         parts = ', '.join(f'{f}:{w:.3f}'
-                          for f, w in zip(self.formulas, self.weights))
+                          for f, w in zip(self.formulas, self.phase_fractions))
         return f'FormingPhases({parts})'
 
 
@@ -688,7 +688,7 @@ class DiagnosticData:
 # ── measurement model ────────────────────────────────────────────────────────
 
 def _mass_from_molar(molar_weights, compositions):
-    """Convert molar mixing weights to normalised mass weights."""
+    """Convert molar mixing phase_fractions to normalised mass phase_fractions."""
     M = np.array([c.weight for c in compositions], dtype=float)
     m = M * np.asarray(molar_weights, dtype=float)
     s = m.sum()
@@ -753,7 +753,7 @@ def _observe(tpf, unknown_idx, sample_c, experimental_error, predicted_error,
     Turn one composition into a PICIP :class:`~picip.picip.Sample`.
 
     Reads off the phases that form at ``sample_c`` via the fixed triangulation,
-    hides ``unknown_idx``, converts the remaining phases' molar mixing weights
+    hides ``unknown_idx``, converts the remaining phases' phase fractions
     to mass weights, and corrupts them with Dirichlet measurement error — the
     same information a real experiment would hand over.
 
@@ -770,7 +770,7 @@ def _observe(tpf, unknown_idx, sample_c, experimental_error, predicted_error,
     order = list(forming.indices)
     keep = [i for i in range(len(order)) if order[i] != unknown_idx]
     k_idx = [order[i] for i in keep]
-    molar = forming.weights[keep]
+    molar = forming.phase_fractions[keep]
     molar = molar / molar.sum()
     comps = list(pf.convert_standard_to_pymatgen(tpf.points_standard[k_idx]))
 
@@ -1150,7 +1150,7 @@ def diagnostic_figure(trial, sample_index=-1, batch_index=-1, title=None):
         Hidden on load.  Absent for a single-sample trial.
     ``true direction`` / ``estimated direction``
         Lines from the average known through the sample to the boundary, built
-        from the noiseless molar weights and from the measured (errored) weights
+        from the noiseless molar phase_fractions and from the measured (errored) phase_fractions
         respectively.  The true line passes exactly through the unknown phase, so
         the gap between the two lines *is* the measurement error, made visible.
     ``batch (bN)``
@@ -1223,7 +1223,7 @@ def diagnostic_figure(trial, sample_index=-1, batch_index=-1, title=None):
         pl.plot_p(d.combined_densities[n], s=sz['density'],
                   name=f'combined p_density ({tag})', visible='legendonly')
 
-    # ── stage 4: the direction the measured weights imply ───────────────────
+    # ── stage 4: the direction the measured phase_fractions imply ───────────────────
     # sample = w_u * unknown + (1 - w_u) * c, where c is the average known on
     # the simplex, so the ray c → sample passes through the unknown exactly when
     # c is built from the noiseless molar weights.
