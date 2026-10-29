@@ -40,5 +40,17 @@ def composition_to_standard_basis(composition: KnownsLike, elements: Collection[
     ndarray, shape (n_compositions, n_elements) or (n_elements,)
         (`ndarray` of) the compositions, each converted to standard basis
     """
+    compositions = (composition,) if (is_single := isinstance(composition, Composition)) else composition
+    elements = tuple(elements)
 
-    raise NotImplementedError
+    fractions = np.fromiter(
+        (
+            comp.get_atomic_fraction(element)
+            for comp in compositions
+            for element in elements
+        ),
+        dtype=np.float64,
+        count=len(compositions) * len(elements),
+    ).reshape(len(compositions), len(elements))
+
+    return fractions[0] if is_single else fractions
