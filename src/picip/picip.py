@@ -49,7 +49,8 @@ import pandas as pd
 
 from picip import utils
 from picip.exceptions import ZeroPException
-from picip.utils.composition import composition_to_standard_basis, atom_count
+from picip.utils.composition import composition_to_standard_basis, atom_count, molar_mass
+from picip.utils.mole_calculations import phase_fraction_to_mass_fraction
 
 
 def _requires_samples(method):
@@ -1792,10 +1793,7 @@ class PICIP:
     def _convert_phase_fractions_to_mass_fractions(self, phases, weights):
         """Convert phase-fraction weights as used in the `Sample` class
         to mass-fraction weights for the given phases."""
-        molar_masses=np.array([phase.weight for phase in phases])
-        mass_weights=molar_masses*weights
-        weights=np.array(mass_weights)/sum(mass_weights)
-        return weights
+        return phase_fraction_to_mass_fraction(weights, molar_mass(phases), atom_count(phases))
 
     def _find_intersection(self, polygon_constraints, x, sample, epsilon=1e-2):
         """
