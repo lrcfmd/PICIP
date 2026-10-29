@@ -50,8 +50,9 @@ import pandas as pd
 from picip import utils
 from picip.exceptions import ZeroPException
 from picip.utils.composition import composition_to_standard_basis, atom_count, molar_mass
-from picip.utils.mole_calculations import rel_total_phase_atom_count_to_mass_fraction, rel_n_formula_units_to_phase_fraction, \
-    rel_n_formula_units_to_mass_fraction
+from picip.utils.mole_calculations import rel_total_phase_atom_count_to_mass_fraction, \
+    rel_n_formula_units_to_phase_fraction, \
+    rel_n_formula_units_to_mass_fraction, rel_mass_to_phase_fraction
 
 
 def _requires_samples(method):
@@ -260,13 +261,8 @@ class Sample:
             )
         if any(w <= 0 for w in mass_weights):
             raise ValueError("All mass_weights must be positive.")
-        molar_masses = np.array([known.weight for known in self.knowns])
-        # This is moles of individual atoms
-        # moles = mass / M
-        rel_amounts_of_substance = np.array(mass_weights) * self._atom_counts() / molar_masses
-        # Moles of formula units in phase i / Sum over j moles of formula units in phase j
-        self.phase_fractions = rel_amounts_of_substance / sum(rel_amounts_of_substance)
-        self.mass_weights = np.array(mass_weights) / sum(mass_weights)
+        self.phase_fractions = rel_mass_to_phase_fraction(mass_weights, molar_mass(self.knowns), self._atom_counts())
+        self.mass_weights = mass_weights / mass_weights.sum()
 
     def set_predicted_error(self, predicted_error, prior=1e-4):
         """
