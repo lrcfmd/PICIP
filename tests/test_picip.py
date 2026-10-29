@@ -782,34 +782,32 @@ def test_composition_to_standard_basis():
 
 
 def test_mole_calculations(subtests):
-    # Formula-unit amounts 2:1, with atom counts 2:4 and
-    # molar masses 10:40, give atom amounts 4:4 and masses 20:40.
-    formula_unit_fractions = np.array([2 / 3, 1 / 3], dtype=np.float64)
-    phase_fractions = np.array([0.5, 0.5], dtype=np.float64)
-    mass_fractions = np.array([1 / 3, 2 / 3], dtype=np.float64)
+    rel_n_formula_units = np.array([2., 1.], dtype=np.float64)
+    rel_total_phase_atom_counts = np.array([10., 10.], dtype=np.float64)
+    rel_masses = np.array([50., 100.], dtype=np.float64)
     molar_masses = np.array([10.0, 40.0], dtype=np.float64)
     atom_counts = np.array([2.0, 4.0], dtype=np.float64)
 
     cases = [
         (
-            "formula_unit_fraction_to_mass_fraction",
-            (formula_unit_fractions, molar_masses),
-            mass_fractions,
+            "rel_n_formula_units_to_mass_fraction",
+            (rel_n_formula_units, molar_masses),
+            rel_masses,
         ),
         (
-            "formula_unit_fraction_to_phase_fraction",
-            (formula_unit_fractions, atom_counts),
-            phase_fractions,
+            "rel_n_formula_units_to_phase_fraction",
+            (rel_n_formula_units, atom_counts),
+            rel_total_phase_atom_counts,
         ),
         (
-            "mass_fraction_to_phase_fraction",
-            (mass_fractions, molar_masses, atom_counts),
-            phase_fractions,
+            "rel_mass_to_phase_fraction",
+            (rel_masses, molar_masses, atom_counts),
+            rel_total_phase_atom_counts,
         ),
         (
-            "phase_fraction_to_mass_fraction",
-            (phase_fractions, molar_masses, atom_counts),
-            mass_fractions,
+            "rel_total_phase_atom_count_to_mass_fraction",
+            (rel_total_phase_atom_counts, molar_masses, atom_counts),
+            rel_masses,
         ),
     ]
 
