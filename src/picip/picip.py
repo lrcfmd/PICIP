@@ -479,7 +479,7 @@ class PICIP:
             raise Exception(
                 f"Sample {sample.name} contains elements not in phase field: {sorted(extra)}"
             )
-        comp_standard=np.array([sample.composition.get_atomic_fraction(el) for el in self.phase_field.elements])
+        comp_standard=np.array(composition_to_standard_basis(sample.composition, self.phase_field.elements))
         # Check in the standard basis, before converting.  The constrained basis
         # spans only the subspace satisfying the constraints, so converting
         # projects any violation away — this is the last point at which a
