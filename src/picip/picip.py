@@ -46,7 +46,10 @@ from scipy.stats import dirichlet, multivariate_normal
 from scipy.interpolate import griddata
 from pymatgen.core import Composition
 import pandas as pd
+
+from picip import utils
 from picip.exceptions import ZeroPException
+from picip.utils.composition import composition_to_standard_basis
 
 
 def _requires_samples(method):
@@ -492,7 +495,7 @@ class PICIP:
 
         # Rows: known phase; columns: element
         # Fractions of  atoms in phase i which are element j
-        sample.knowns_standard=np.array([[k.get_atomic_fraction(el) for el in self.phase_field.elements] for k in sample.knowns])
+        sample.knowns_standard=composition_to_standard_basis(sample.knowns, self.phase_field.elements)
         for k, k_s in zip(sample.knowns, sample.knowns_standard):
             self._warn_if_outside_field(k_s, f"known {k.reduced_formula}")
 
