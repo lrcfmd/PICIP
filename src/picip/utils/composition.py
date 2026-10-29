@@ -8,7 +8,11 @@ from pymatgen.core import Composition
 
 
 def atom_count(compositions: Collection[Composition]) -> npt.NDArray[np.float64]:
-    raise NotImplementedError
+    return np.fromiter(
+        (composition.num_atoms for composition in compositions),
+        dtype=np.float64,
+        count=len(compositions)
+    )
 
 
 def molar_mass(compositions: Collection[Composition]) -> npt.NDArray[np.float64]:
