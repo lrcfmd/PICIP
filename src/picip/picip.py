@@ -49,7 +49,7 @@ import pandas as pd
 
 from picip import utils
 from picip.exceptions import ZeroPException
-from picip.utils.composition import composition_to_standard_basis
+from picip.utils.composition import composition_to_standard_basis, atom_count
 
 
 def _requires_samples(method):
@@ -211,11 +211,7 @@ class Sample:
         np.ndarray : Numpy array of shape (n_knowns,)
             Total number of atoms per formula unit for each known phase.
         """
-        return np.fromiter(
-            (k.num_atoms for k in self.knowns),
-            dtype=np.float64,
-            count=len(self.knowns)
-        )
+        return atom_count(self.knowns)
 
     def add_molar_weights(self, mol_weights):
         """
