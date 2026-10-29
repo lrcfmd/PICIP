@@ -548,7 +548,7 @@ class Cube:
                 s = samples[0]
                 knowns_str = ' + '.join(
                     f'{k.reduced_formula} ({w:.0%})'
-                    for k, w in zip(s.knowns, s.weights)
+                    for k, w in zip(s.knowns, s.phase_fractions)
                 )
                 title = f'{s.name} | {s.composition.reduced_formula} | {knowns_str} | σ={s.predicted_error}'
             else:
@@ -725,7 +725,7 @@ class Cube:
 
         knowns_str = ' + '.join(
             f'{k.reduced_formula} ({w:.0%})'
-            for k, w in zip(sample.knowns, sample.weights)
+            for k, w in zip(sample.knowns, sample.phase_fractions)
         )
         pf = self.phase_field
         subtitle = (f'ω: {len(pf.omega)} pts | '

@@ -46,7 +46,13 @@ from scipy.stats import dirichlet, multivariate_normal
 from scipy.interpolate import griddata
 from pymatgen.core import Composition
 import pandas as pd
+
+from picip import utils
 from picip.exceptions import ZeroPException
+from picip.utils.composition import composition_to_standard_basis, atom_count, molar_mass
+from picip.utils.mole_calculations import rel_total_phase_atom_count_to_mass_fraction, \
+    rel_n_formula_units_to_phase_fraction, \
+    rel_n_formula_units_to_mass_fraction, rel_mass_to_phase_fraction
 
 
 def _requires_samples(method):
@@ -121,11 +127,11 @@ class Sample:
         Default 1e-4.  Set by set_predicted_error(); rarely needs changing.
     knowns : list of pymatgen.core.Composition or None
         Co-existing known phases.  Set by add_knowns().
-    weights : ndarray or None
-        Normalised mole fractions of the known phases.
+    phase_fractions : ndarray or None
+        Mole fractions of the known phases.
         Set by add_mass_weights() or add_molar_weights().
     mass_weights : ndarray or None
-        Normalised mass fractions of the known phases.
+        Mass fractions of the known phases.
         Set by add_mass_weights() or add_molar_weights().
     comp_constrained : ndarray or None
         Sample composition in constrained basis.  Set by PICIP.add_sample().
@@ -170,7 +176,7 @@ class Sample:
         self.predicted_error = DEFAULT_PREDICTED_ERROR
         self.prior = 1e-4
         self.knowns = None
-        self.weights = None
+        self.phase_fractions = None
         self.mass_weights = None
         self.comp_constrained = None
         self.knowns_constrained = None
@@ -199,9 +205,20 @@ class Sample:
             raise ValueError("knowns must not be empty.")
         self.knowns=[Composition(k) for k in knowns]
 
+    def _atom_counts(self):
+        """
+        Count atoms in each known phase.
+
+        Returns
+        -------
+        np.ndarray : Numpy array of shape (n_knowns,)
+            Total number of atoms per formula unit for each known phase.
+        """
+        return atom_count(self.knowns)
+
     def add_molar_weights(self, mol_weights):
         """
-        Set known-phase weights from molar (mole-fraction) quantities.
+        Set known-phase phase_fractions from formula-unit fraction quantities.
 
         Use add_mass_weights() instead if your phase fractions come from Rietveld
         refinement (which reports mass fractions directly).
@@ -212,6 +229,7 @@ class Sample:
             Relative molar amounts for each known phase.  Need not be normalised.
             Order must match the list passed to add_knowns().
         """
+        mol_weights = np.array(mol_weights)
         if len(mol_weights) != len(self.knowns):
             raise ValueError(
                 f"mol_weights length ({len(mol_weights)}) does not match "
@@ -219,20 +237,17 @@ class Sample:
             )
         if any(w <= 0 for w in mol_weights):
             raise ValueError("All mol_weights must be positive.")
-        self.weights=np.array(mol_weights)/sum(mol_weights)
-        molar_masses=np.array([known.weight for known in self.knowns])
-        # Derive mass fractions from mole amounts × molar mass
-        mass_weights=molar_masses*np.array(mol_weights)
-        self.mass_weights=mass_weights/sum(mass_weights)
+        self.phase_fractions = rel_n_formula_units_to_phase_fraction(mol_weights, self._atom_counts())
+        self.mass_weights = rel_n_formula_units_to_mass_fraction(mol_weights, molar_mass(self.knowns))
 
     def add_mass_weights(self, mass_weights):
         """
-        Set known-phase weights from mass-fraction quantities (primary method).
+        Set known-phase phase_fractions from relative mass quantities (primary method).
 
         This is the primary weight-setting method and the one most commonly
         used in practice, since Rietveld refinement reports mass fractions.
-        Internally converts to mole fractions (weights) by dividing each
-        mass weight by the phase's molar mass.
+        Internally converts to relative amounts of substance (rel_amounts_of_substance)
+        by dividing each mass weight by the phase's molar mass.
 
         Parameters
         ----------
@@ -240,6 +255,7 @@ class Sample:
             Relative mass amounts for each known phase (e.g. Rietveld scale
             factors).  Need not be normalised.  Order must match add_knowns().
         """
+        mass_weights = np.array(mass_weights)
         if len(mass_weights) != len(self.knowns):
             raise ValueError(
                 f"mass_weights length ({len(mass_weights)}) does not match "
@@ -247,10 +263,8 @@ class Sample:
             )
         if any(w <= 0 for w in mass_weights):
             raise ValueError("All mass_weights must be positive.")
-        molar_masses = np.array([known.weight for known in self.knowns])
-        weights = np.array(mass_weights) / molar_masses   # moles = mass / M
-        self.weights = weights / sum(weights)
-        self.mass_weights = np.array(mass_weights) / sum(mass_weights)
+        self.phase_fractions = rel_mass_to_phase_fraction(mass_weights, molar_mass(self.knowns), self._atom_counts())
+        self.mass_weights = mass_weights / mass_weights.sum()
 
     def set_predicted_error(self, predicted_error, prior=1e-4):
         """
@@ -444,9 +458,9 @@ class PICIP:
         """
         if sample.knowns is None:
             raise Exception(f"Sample {sample.name} has no knowns — call add_knowns() first")
-        if sample.weights is None:
+        if sample.phase_fractions is None:
             raise Exception(
-                f"Sample {sample.name} has no weights — call add_mass_weights() "
+                f"Sample {sample.name} has no phase_fractions — call add_mass_weights() "
                 "or add_molar_weights() first"
             )
         field_elements = set(self.phase_field.elements)
@@ -457,7 +471,7 @@ class PICIP:
             raise Exception(
                 f"Sample {sample.name} contains elements not in phase field: {sorted(extra)}"
             )
-        comp_standard=np.array([sample.composition.get_atomic_fraction(el) for el in self.phase_field.elements])
+        comp_standard=np.array(composition_to_standard_basis(sample.composition, self.phase_field.elements))
         # Check in the standard basis, before converting.  The constrained basis
         # spans only the subspace satisfying the constraints, so converting
         # projects any violation away — this is the last point at which a
@@ -470,12 +484,19 @@ class PICIP:
                 raise Exception(
                     f"Known phase {k} contains elements not in phase field: {sorted(extra)}"
                 )
-        sample.knowns_standard=np.array([[k.get_atomic_fraction(el) for el in self.phase_field.elements] for k in sample.knowns])
+
+        # Rows: known phase; columns: element
+        # Fractions of  atoms in phase i which are element j
+        sample.knowns_standard=composition_to_standard_basis(sample.knowns, self.phase_field.elements)
         for k, k_s in zip(sample.knowns, sample.knowns_standard):
             self._warn_if_outside_field(k_s, f"known {k.reduced_formula}")
 
+        # Convert to array of constrained-space vectors
+        # Rows: knowns; columns: constrained-space basis vectors
         sample.knowns_constrained=self.phase_field.convert_to_constrained_basis(sample.knowns_standard)
-        sample.average_k=np.sum(sample.weights[:,np.newaxis]*sample.knowns_constrained, axis=0)
+
+        # Column-wise dot products giving average k as a row vector
+        sample.average_k=np.sum(sample.phase_fractions[:,np.newaxis] * sample.knowns_constrained, axis=0)
 
         if sample.predicted_error is None:
             raise Exception(f"Predicted error has not been set for sample {sample.name}")
@@ -817,7 +838,7 @@ class PICIP:
         ndarray, shape (N,)
             Normalised probability density over omega.
         """
-        weights=sample.weights
+        weights=sample.phase_fractions
         k_c=sample.knowns_constrained
         s=sample.comp_constrained
         mass_weights=sample.mass_weights
@@ -860,7 +881,7 @@ class PICIP:
         for x in normalised_points:
             if np.any(np.abs(x)<floor):
                 x=[floor if p<floor else p-floor for p in x]
-            x=self._convert_weights_moletomass(sample.knowns,x)
+            x=self._convert_phase_fractions_to_mass_fractions(sample.knowns, x)
             alpha_l=np.array(x)/predicted_error
             dirichlet_likelihood.append(dirichlet.pdf(mass_weights,alpha_l))
 
@@ -910,7 +931,7 @@ class PICIP:
                 if np.any(np.abs(x_bary) < floor):
                     x_bary = np.array([floor if v < floor else v - floor
                                        for v in x_bary])
-                x_mass = self._convert_weights_moletomass(sample.knowns, x_bary)
+                x_mass = self._convert_phase_fractions_to_mass_fractions(sample.knowns, x_bary)
                 alpha_c = np.array(x_mass) / predicted_error
                 try:
                     pdf_c = float(dirichlet.pdf(mass_weights, alpha_c))
@@ -978,12 +999,12 @@ class PICIP:
         # Dirichlet likelihood at each triangle point (mirrors the 2-D loop):
         # floor the barycentric weights, convert mole→mass, form the Dirichlet
         # concentration alpha = mass / predicted_error, evaluate at the observed
-        # mass weights.
+        # mass phase_fractions.
         dirichlet_likelihood = []
         for x in bary:
             if np.any(np.abs(x) < floor):
                 x = [floor if v < floor else v - floor for v in x]
-            x_mass  = self._convert_weights_moletomass(sample.knowns, x)
+            x_mass  = self._convert_phase_fractions_to_mass_fractions(sample.knowns, x)
             alpha_l = np.array(x_mass) / predicted_error
             try:
                 pdf = float(dirichlet.pdf(mass_weights, alpha_l))
@@ -1554,7 +1575,7 @@ class PICIP:
             for c, alpha in zip(cs, alphas):
                 a = np.where(np.abs(alpha) < floor, floor, alpha)
                 a = a / a.sum()
-                mass_alpha = self._convert_weights_moletomass(sample.knowns, a)
+                mass_alpha = self._convert_phase_fractions_to_mass_fractions(sample.knowns, a)
                 try:
                     lj = float(dirichlet.pdf(mass_obs, mass_alpha / sigma))
                 except (ValueError, ZeroDivisionError):
@@ -1597,7 +1618,7 @@ class PICIP:
             for cc, alpha in zip(cs_c, alphas_c):
                 a = np.where(np.abs(alpha) < floor, floor, alpha)
                 a = a / a.sum()
-                mass_alpha = self._convert_weights_moletomass(sample.knowns, a)
+                mass_alpha = self._convert_phase_fractions_to_mass_fractions(sample.knowns, a)
                 try:
                     lj = float(dirichlet.pdf(mass_obs, mass_alpha / sigma))
                 except (ValueError, ZeroDivisionError):
@@ -1764,12 +1785,10 @@ class PICIP:
             p=np.nan_to_num(p)
         return(p/np.sum(p))
 
-    def _convert_weights_moletomass(self, phases, weights):
-        """Convert mole-fraction weights to mass-fraction weights for the given phases."""
-        molar_masses=np.array([phase.weight for phase in phases])
-        mass_weights=molar_masses*weights
-        weights=np.array(mass_weights)/sum(mass_weights)
-        return weights
+    def _convert_phase_fractions_to_mass_fractions(self, phases, weights):
+        """Convert phase-fraction weights as used in the `Sample` class
+        to mass-fraction weights for the given phases."""
+        return rel_total_phase_atom_count_to_mass_fraction(weights, molar_mass(phases), atom_count(phases))
 
     def _find_intersection(self, polygon_constraints, x, sample, epsilon=1e-2):
         """

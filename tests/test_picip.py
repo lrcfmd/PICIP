@@ -13,31 +13,29 @@ import numpy as np
 from pymatgen.core import Composition
 
 from picip import Phase_Field, PICIP, Sample, make_plotter
+from picip.utils import composition, mole_calculations
 
 
 # ── shared fixtures ────────────────────────────────────────────────────────────
 
-def _pf_2d():
+def _pf(species_list):
+    """Sets up a phase field with `setup_uncharged` and returns it"""
     pf = Phase_Field()
-    pf.setup_uncharged(["Fe", "Mn", "Ti"])
+    pf.setup_uncharged(species_list)
     return pf
+
+def _pf_2d():
+    """2D phase field (Fe-Mn-Ti)"""
+    return _pf(["Fe", "Mn", "Ti"])
 
 def _pf_3d():
-    pf = Phase_Field()
-    pf.setup_uncharged(["Fe", "Mn", "Ti", "Cu"])
-    return pf
+    """3D phase field (Fe-Mn-Ti-Cu)"""
+    return _pf(["Fe", "Mn", "Ti", "Cu"])
 
-def _sample_2d(name, err=0.3):
-    s = Sample(name, "Fe2Mn4Ti4")
-    s.add_knowns(["FeMn", "FeTi"])
-    s.add_molar_weights([0.3, 0.7])
-    s.set_predicted_error(err)
-    return s
-
-def _sample_3d(name, err=0.3):
-    s = Sample(name, "Fe2Mn2Ti2Cu4")
-    s.add_knowns(["FeMn", "FeTi", "FeCu"])
-    s.add_molar_weights([0.25, 0.35, 0.40])
+def _sample(name, composition="Fe2Mn2Ti2Cu4", knowns=("FeMn", "FeTi", "FeCu"), weights=(0.10, 0.67, 5.02), err=0.3):
+    s = Sample(name, composition)
+    s.add_knowns(knowns)
+    s.add_molar_weights(weights)
     s.set_predicted_error(err)
     return s
 
@@ -323,27 +321,100 @@ def _run_2sample_3d(pf, s_a, s_b, label, n_l=30, n_p=10):
 # ── automated tests ────────────────────────────────────────────────────────────
 
 def test_single_sample_2d():
-    """Single 2-D sample runs and produces a normalised probability map."""
-    pf = _pf_2d()
-    s = _sample_2d("s1")
-    picip = PICIP(pf)
-    picip.add_sample(s)
-    pred = picip.run()
-    assert pred.prob_density.sum() > 0, "Probability map is all zero"
-    assert abs(pred.prob_density.sum() - 1.0) < 1e-6, "Probability map not normalised"
-    print("PASS  test_single_sample_2d")
+    """Check molar-weight atom balance and prediction normalisation."""
+    for weights in [[1.0, 1.0], [0.3, 0.7]]:
+        pf = _pf(["Ti", "Ni", "Al"])
+        s = _sample("s1",
+            composition="Ti2NiAl3",
+            knowns=["TiNi", "TiAl3"],
+            weights=weights,
+        )
+        picip = PICIP(pf)
+        picip.add_sample(s)
+
+        # w1 FeMn + w2 FeTi2, in Fe-Mn-Ti order.
+        w1, w2 = weights
+        expected = np.array([w1 + w2, w1, 3 * w2])
+        expected /= expected.sum()
+        actual = pf.convert_to_standard_basis(s.average_k)
+        np.testing.assert_allclose(
+            actual, expected, rtol=1e-7, atol=1e-9,
+            err_msg=f"Incorrect atom balance for formula-unit fraction weights {weights}",
+        )
+
+        pred = picip.run()
+        assert pred.prob_density.sum() > 0, f"Probability map for formula-unit fractions {weights} is all zero"
+        assert abs(pred.prob_density.sum() - 1.0) < 1e-6, f"Probability map for formula-unit fractions {weights} not normalised"
+        print("PASS  test_single_sample_2d")
 
 
 def test_single_sample_3d():
-    """Single 3-D sample runs and produces a normalised probability map."""
+    """Check molar-weight atom balance and prediction normalisation."""
+    for weights in ((1.0, 1.0, 1.0), (0.25, 0.35, 0.40)):
+        pf = _pf(["Ti", "Ni", "Fe", "Al"])
+        s = _sample("s1",
+            composition="Ti33.33Fe13.33Ni10.67Al42.67",
+            knowns=["TiNi", "TiFe2", "TiAl3"],
+            weights=weights
+        )
+        picip = PICIP(pf)
+        picip.add_sample(s)
+
+        # w1 TiNi + w2 TiFe2 + w3 TiAl3, in Ti-Ni-Fe-Al order.
+        w1, w2, w3 = weights
+        expected = np.array([w1 + w2 + w3, w1, 2 * w2, 3 * w3])
+        expected /= expected.sum()
+        actual = pf.convert_to_standard_basis(s.average_k)
+        np.testing.assert_allclose(
+            actual, expected, rtol=1e-7, atol=1e-9,
+            err_msg=f"Incorrect atom balance for formula-unit fractions {weights}",
+        )
+
+        pred = picip.run(n_l=30, n_p=10)
+        assert pred.prob_density.sum() > 0
+        assert abs(pred.prob_density.sum() - 1.0) < 1e-6
+        print("PASS  test_single_sample_3d")
+
+
+def test_weights_normalised():
     pf = _pf_3d()
-    s = _sample_3d("s1")
+    s = _sample("s1")
     picip = PICIP(pf)
     picip.add_sample(s)
-    pred = picip.run(n_l=30, n_p=10)
-    assert pred.prob_density.sum() > 0
-    assert abs(pred.prob_density.sum() - 1.0) < 1e-6
-    print("PASS  test_single_sample_3d")
+    np.testing.assert_allclose(
+        np.sum(s.phase_fractions), 1.0, rtol=1e-7, atol=1e-9,
+        err_msg="Known phase phase fractions not normalised",
+    )
+
+
+def test_mass_weights_normalised():
+    pf = _pf_3d()
+    s = _sample("s1")
+    picip = PICIP(pf)
+    picip.add_sample(s)
+    np.testing.assert_allclose(
+        np.sum(s.mass_weights), 1.0, rtol=1e-7, atol=1e-9,
+        err_msg="Known phase mass fractions not normalised",
+    )
+
+
+def test_mass_weights_atom_balance():
+    """Masses for one mole of each phase must preserve atom balance."""
+    pf = _pf(["Ti", "Ni", "Al"])
+    s = Sample("s1", "Ti2NiAl3")
+    s.add_knowns(["TiNi", "TiAl3"])
+    s.add_mass_weights([float(k.weight) for k in s.knowns])
+
+    picip = PICIP(pf)
+    picip.add_sample(s)
+
+    expected = np.array([2.0, 1.0, 3.0]) / 6.0
+    actual = pf.convert_to_standard_basis(s.average_k)
+    np.testing.assert_allclose(
+        actual, expected, rtol=1e-7, atol=1e-9,
+        err_msg="Incorrect atom balance for mass weights",
+    )
+    print("PASS  test_mass_weights_atom_balance")
 
 
 def test_multi_sample_nonzero_intersection():
@@ -550,6 +621,242 @@ def test_3d_custom_reduce():
     pf, s_a, s_b = _fixture_3d_custom_reduce()
     _run_2sample_3d(pf, s_a, s_b, "3d_custom_reduce")
     print("PASS  test_3d_custom_reduce")
+
+
+def test_average_k_with_molar_weights():
+    pf = Phase_Field()
+    pf.setup_uncharged(["Ti", "Ni", "Al"])
+
+    knowns = ["TiNi", "TiAl3"]
+    formula_unit_fractions = np.array([6.0, 1.0], dtype=float)
+
+    expected_phase_fractions = [0.75, 0.25]
+
+    # Two moles of TiNi and one mole of TiAl3 give 3 Ti, 2 Ni, 3 Al atoms total.
+    expected_standard = np.array([7.0, 6.0, 3.0], dtype=float) / 16.0
+    sample = Sample(
+        "s1",
+        Composition({"Ti": expected_standard[0], "Ni": expected_standard[1], "Al": expected_standard[2]}),
+    )
+    sample.add_knowns(knowns)
+    sample.add_molar_weights(formula_unit_fractions)
+    sample.set_predicted_error(0.3)
+
+    picip = PICIP(pf)
+    picip.add_sample(sample)
+
+    expected_k = pf.convert_to_constrained_basis(expected_standard)
+
+    np.testing.assert_allclose(
+        sample.phase_fractions,
+        expected_phase_fractions,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="Molar phase_fractions were not normalized to formula-unit mole fractions",
+    )
+    np.testing.assert_allclose(
+        sample.average_k,
+        expected_k,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k is incorrect for add_molar_weights()",
+    )
+    np.testing.assert_allclose(
+        pf.convert_to_standard_basis(sample.average_k),
+        expected_standard,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k does not conserve the atom basis for add_molar_weights()",
+    )
+
+
+def test_average_k_with_mass_weights():
+    pf = Phase_Field()
+    pf.setup_uncharged(["Ti", "Ni", "Al"])
+
+    knowns = ["TiNi", "TiAl3"]
+    formula_unit_fractions = np.array([6.0, 1.0], dtype=float)
+
+    expected_phase_fractions = np.array([0.75, 0.25], dtype=float)
+    mass_weights = formula_unit_fractions * np.array([Composition(k).weight for k in knowns], dtype=float)
+
+    # Same conserved atom balance as in the molar-weight test.
+    expected_standard = np.array([7.0, 6.0, 3.0], dtype=float) / 16.0
+    sample = Sample(
+        "s1",
+        Composition({"Ti": expected_standard[0], "Ni": expected_standard[1], "Al": expected_standard[2]}),
+    )
+    sample.add_knowns(knowns)
+    sample.add_mass_weights(mass_weights)
+    sample.set_predicted_error(0.3)
+
+    picip = PICIP(pf)
+    picip.add_sample(sample)
+
+    expected_k = pf.convert_to_constrained_basis(expected_standard)
+
+    np.testing.assert_allclose(
+        sample.phase_fractions,
+        expected_phase_fractions / expected_phase_fractions.sum(),
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="Mass phase_fractions were not converted to phase fractions correctly",
+    )
+    np.testing.assert_allclose(
+        sample.mass_weights,
+        mass_weights / mass_weights.sum(),
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="Mass phase_fractions were not normalized correctly",
+    )
+    np.testing.assert_allclose(
+        sample.average_k,
+        expected_k,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k is incorrect for add_mass_weights()",
+    )
+    np.testing.assert_allclose(
+        pf.convert_to_standard_basis(sample.average_k),
+        expected_standard,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="average_k does not conserve the atom basis for add_mass_weights()",
+    )
+
+
+def test_atom_counts_returns_total_atoms_per_composition():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+        Composition("C6H12O6"),
+    ]
+
+    result = composition.atom_count(composition_list)
+
+    expected = np.array([5.0, 2.0, 24.0], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.atom_counts` counts atoms incorrectly",
+    )
+
+
+def test_molar_masses_returns_total_molar_mass_per_composition():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+        Composition("C6H12O6"),
+    ]
+
+    result = composition.molar_mass(composition_list)
+
+    expected = np.array([159.688, 22.940, 180.156], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=0,
+        atol=0.005,
+        err_msg="`utils.composition.molar_masses` computes molar masses incorrectly",
+    )
+
+
+def test_composition_to_standard_basis():
+    example_composition = Composition("Fe2O3")
+    elements = ["Fe", "O"]
+
+    result = composition.composition_to_standard_basis(example_composition, elements)
+
+    expected = np.array([0.4, 0.6], dtype=np.float64)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.composition_to_standard_basis` computes concentrations in a single phase incorrectly",
+    )
+
+
+def test_mole_calculations(subtests):
+    rel_n_formula_units = np.array([2., 1.], dtype=np.float64)
+    rel_total_phase_atom_counts = np.array([10., 10.], dtype=np.float64)
+    rel_masses = np.array([50., 100.], dtype=np.float64)
+    molar_masses = np.array([10.0, 40.0], dtype=np.float64)
+    atom_counts = np.array([2.0, 4.0], dtype=np.float64)
+
+    cases = [
+        (
+            "rel_n_formula_units_to_mass_fraction",
+            (rel_n_formula_units, molar_masses),
+            rel_masses / 150,
+        ),
+        (
+            "rel_n_formula_units_to_phase_fraction",
+            (rel_n_formula_units, atom_counts),
+            rel_total_phase_atom_counts / 20,
+        ),
+        (
+            "rel_mass_to_phase_fraction",
+            (rel_masses, molar_masses, atom_counts),
+            rel_total_phase_atom_counts / 20,
+        ),
+        (
+            "rel_total_phase_atom_count_to_mass_fraction",
+            (rel_total_phase_atom_counts, molar_masses, atom_counts),
+            rel_masses / 150,
+        ),
+    ]
+
+    for method_name, args, expected in cases:
+        with subtests.test(method=method_name):
+            result = getattr(mole_calculations, method_name)(*args)
+
+            assert isinstance(result, np.ndarray)
+            assert result.dtype == np.dtype(np.float64)
+            assert result.shape == expected.shape
+            np.testing.assert_allclose(
+                result,
+                expected,
+                rtol=1e-7,
+                atol=1e-9,
+                err_msg=f"{method_name} returned incorrect fractions",
+            )
+
+
+def test_compositions_to_standard_basis():
+    composition_list = [
+        Composition("Fe2O3"),
+        Composition("Li1O1"),
+    ]
+    elements = ["Fe", "O", "Li"]
+
+    result = composition.composition_to_standard_basis(composition_list, elements)
+
+    expected = np.array(
+        [
+            [0.4, 0.6, 0.0],
+            [0.0, 0.5, 0.5],
+        ],
+        dtype=np.float64,
+    )
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == np.float64
+    np.testing.assert_allclose(
+        result,
+        expected,
+        rtol=1e-7,
+        atol=1e-9,
+        err_msg="`utils.composition.compositions_to_standard_basis` computes concentrations for a list of "
+                "compositions incorrectly",
+    )
 
 
 def run_automated():
