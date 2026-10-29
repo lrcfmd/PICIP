@@ -6,7 +6,7 @@ def formula_unit_fraction_to_mass_fraction(
         phase_fractions: npt.NDArray[np.float64],
         molar_masses: npt.NDArray[np.float64]
 ) -> npt.NDArray[np.float64]:
-    raise NotImplementedError
+    return (rel_masses := phase_fractions * molar_masses) / rel_masses.sum()
 
 
 def formula_unit_fraction_to_phase_fraction(
