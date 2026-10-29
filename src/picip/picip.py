@@ -229,6 +229,7 @@ class Sample:
             Relative molar amounts for each known phase.  Need not be normalised.
             Order must match the list passed to add_knowns().
         """
+        mol_weights = np.array(mol_weights)
         if len(mol_weights) != len(self.knowns):
             raise ValueError(
                 f"mol_weights length ({len(mol_weights)}) does not match "
