@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import numpy as np
 import multiprocessing as mp
 import random
@@ -15,7 +17,25 @@ from math import dist as deu
 import time
 import os
 
+from .utils.composition import composition_to_standard_basis
+
+
 class Phase_Field:
+
+    # Array of normal vectors for constraints
+    # Constraint coefficients by which composition is dot-producted to equal
+    # some targets based on `normal_vectors_b` (`constraint_failures`)
+    # Also used as constraint coefficients in `_find_vertices_and_edges`
+    normal_vectors: np.ndarray
+
+    # Used only as a target for dot product of composition and some coefficients
+    # in `constraint_failures`
+    normal_vectors_b: np.ndarray
+    
+    @dataclass(frozen=True)
+    class _SeparatedCharges:
+        fixed: list[int]
+        ranges: list[list[int]]
 
     def _init(self):
         """Initialise empty element/dimension bookkeeping before a setup_* call populates the field."""
@@ -227,7 +247,6 @@ class Phase_Field:
         has_ranges=False
         charge_vector=None
         if isinstance(species, dict):
-            has_ranges=False
             for value in species.values():
                 if isinstance(value, list):
                     has_ranges=True
@@ -291,6 +310,7 @@ class Phase_Field:
         ----------
         charge_vector : array_like of shape (n,), optional
             Formal charge for each of the `n` elements.
+        n_points : int, takes precedence over `resolution`
         resolution : int, optional, default=30
             Points are spaced `1/resolution` apart in each direction.
         precalculated_basis : ndarray of shape (n, m), optional
@@ -412,6 +432,52 @@ class Phase_Field:
         x = np.linalg.lstsq(A.T, b, rcond=None)[0]
         return x / np.linalg.norm(x)
 
+
+    def _has_range(self, species_dict):
+        """
+        Determines if each species in ``species_dict`` has a range of possible charges.
+
+        Parameters
+        ----------
+        species_dict : dict[]
+            Mapping of element symbol (str) to its charge specification. See `setup_charge_ranges`.
+
+        Returns
+        -------
+        list[bool]
+            Whether the species at each position in the ``species_dict`` has a charge range.
+        """
+        return [isinstance(x, list) for x in species_dict.values()]
+    
+    def _seperate_charges_set_charge_bounds(self, has_range):
+        """
+        Separate charges in ``self.species_dict`` into fixed charges and ranges of charges.
+
+        Parameters
+        ----------
+        has_range : list[bool]
+            Whether the species at each position in the ``species_dict`` has a charge range
+
+        Returns
+        -------
+        self._SeparatedCharges
+            Object containing a list of fixed charges and a list of separated ones
+        """
+        ranges = [
+            x for x, y in zip(self.species_dict.values(), has_range) if y
+        ]
+        fixed = [
+            x if not y else 0
+            for x, y in zip(self.species_dict.values(), has_range)
+        ]
+        self.charge_max = np.array(fixed, dtype=float)
+        self.charge_max[has_range] = np.array(ranges)[:, 1]
+        self.charge_min = np.array(fixed, dtype=float)
+        self.charge_min[has_range] = np.array(ranges)[:, 0]
+
+        return self._SeparatedCharges(fixed=fixed, ranges=ranges)
+        
+
     def _create_omega_constrained(
             self, precalculated_basis=None, print_basis=False, add_corners_to_knowns=False):
         """
@@ -487,6 +553,7 @@ class Phase_Field:
         # Use print_basis=True once, capture the output, and pass it back via
         # precalculated_basis to get reproducible grid layouts.
         if precalculated_basis is None:
+            # Rows: basis vectors for constrained space, columns: elements
             x = np.empty((self.constrained_dim, dim))
             A = normal_vectors.T
             for i in range(self.constrained_dim):
@@ -502,13 +569,7 @@ class Phase_Field:
         # Pre-compute charge bounds before vertex-finding so the LP can include them
         _charge_ranges = hasattr(self, 'charge_ranges') and self.charge_ranges
         if _charge_ranges:
-            has_range = [isinstance(x, list) for x in self.species_dict.values()]
-            ranges_list = [x for x, y in zip(self.species_dict.values(), has_range) if y]
-            fixed = [x if not y else 0 for x, y in zip(self.species_dict.values(), has_range)]
-            self.charge_max = np.array(fixed, dtype=float)
-            self.charge_max[has_range] = np.array(ranges_list)[:, 1]
-            self.charge_min = np.array(fixed, dtype=float)
-            self.charge_min[has_range] = np.array(ranges_list)[:, 0]
+            self._seperate_charges_set_charge_bounds(self._has_range(self.species_dict))
 
         self._find_vertices_and_edges()
         vertices = self.corners
@@ -615,27 +676,17 @@ class Phase_Field:
     def set_charge_extreme_constraints(self, charge_scalar=0):
         """Compute and store the extreme-charge half-plane constraints for a charge-range field, then filter omega."""
         #this function finds the two hyperplanes corresponding to max and min charges
-        has_range = [isinstance(x, list) for x in self.species_dict.values()]
+        has_range = self._has_range(self.species_dict)
         if not any(has_range):
             raise Exception(
                 'Error, to get charge extremes at least one species must have '
                 + 'a range of charges')
-        ranges = [
-            x for x, y in zip(self.species_dict.values(), has_range) if y
-        ]
-        fixed = [
-            x if not y else 0
-            for x, y in zip(self.species_dict.values(), has_range)
-        ]
-        self.charge_max = np.array(fixed, dtype=float)
-        self.charge_max[has_range] = np.array(ranges)[:, 1]
-        self.charge_min = np.array(fixed, dtype=float)
-        self.charge_min[has_range] = np.array(ranges)[:, 0]
+        separated_charges = self._seperate_charges_set_charge_bounds(has_range)
         self.constrain_charge_omega(charge_scalar)
         constraints = []
-        combinations = self.cartesian(ranges)
+        combinations = self.cartesian(separated_charges.ranges)
         for c in combinations:
-            f = np.array(fixed)
+            f = np.array(separated_charges.fixed)
             f[has_range] = c
             constraints.append(f)
         self.charge_extreme_constraints = constraints
@@ -727,6 +778,8 @@ class Phase_Field:
             norma = np.sum(point, axis=1)
             point = (point.T / norma).T
             point = point - self.contained_point
+
+            # Row-wise dot products (sums over elements)
             point = np.einsum("ij,...j->...i", self.basis, point)
             return point
 
@@ -863,7 +916,7 @@ class Phase_Field:
         knowns_standard = []
         knowns_label = []
         for k in knowns:
-            ks = [k.get_atomic_fraction(e) for e in self.elements]
+            ks = composition_to_standard_basis(k, self.elements)
             failures = self.constraint_failures(ks, tol=tol)
             if failures:
                 # Warn but keep it: dropping the phase silently left callers
@@ -1140,9 +1193,7 @@ class Phase_Field:
         ndarray
             Composition in standard representation.
         """
-        c = Composition(composition)
-        s = [c.get_atomic_fraction(el) for el in self.elements]
-        return s
+        return composition_to_standard_basis(Composition(composition), self.elements)
 
     def constraint_failures(self, point, tol=0.01):
         """
