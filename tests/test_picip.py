@@ -13,7 +13,7 @@ import numpy as np
 from pymatgen.core import Composition
 
 from picip import Phase_Field, PICIP, Sample, make_plotter
-from picip.utils import composition
+from picip.utils import composition, mole_calculations
 
 
 # ── shared fixtures ────────────────────────────────────────────────────────────
@@ -779,6 +779,54 @@ def test_composition_to_standard_basis():
         atol=1e-9,
         err_msg="`utils.composition.composition_to_standard_basis` computes concentrations in a single phase incorrectly",
     )
+
+
+def test_mole_calculations(subtests):
+    # Formula-unit amounts 2:1, with atom counts 2:4 and
+    # molar masses 10:40, give atom amounts 4:4 and masses 20:40.
+    formula_unit_fractions = np.array([2 / 3, 1 / 3], dtype=np.float64)
+    phase_fractions = np.array([0.5, 0.5], dtype=np.float64)
+    mass_fractions = np.array([1 / 3, 2 / 3], dtype=np.float64)
+    molar_masses = np.array([10.0, 40.0], dtype=np.float64)
+    atom_counts = np.array([2.0, 4.0], dtype=np.float64)
+
+    cases = [
+        (
+            "formula_unit_fraction_to_mass_fraction",
+            (formula_unit_fractions, molar_masses),
+            mass_fractions,
+        ),
+        (
+            "formula_unit_fraction_to_phase_fraction",
+            (formula_unit_fractions, atom_counts),
+            phase_fractions,
+        ),
+        (
+            "mass_fraction_to_phase_fraction",
+            (mass_fractions, molar_masses, atom_counts),
+            phase_fractions,
+        ),
+        (
+            "phase_fraction_to_mass_fraction",
+            (phase_fractions, molar_masses, atom_counts),
+            mass_fractions,
+        ),
+    ]
+
+    for method_name, args, expected in cases:
+        with subtests.test(method=method_name):
+            result = getattr(mole_calculations, method_name)(*args)
+
+            assert isinstance(result, np.ndarray)
+            assert result.dtype == np.dtype(np.float64)
+            assert result.shape == expected.shape
+            np.testing.assert_allclose(
+                result,
+                expected,
+                rtol=1e-7,
+                atol=1e-9,
+                err_msg=f"{method_name} returned incorrect fractions",
+            )
 
 
 def test_compositions_to_standard_basis():
