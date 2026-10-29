@@ -885,7 +885,7 @@ class PICIP:
         for x in normalised_points:
             if np.any(np.abs(x)<floor):
                 x=[floor if p<floor else p-floor for p in x]
-            x=self._convert_weights_moletomass(sample.knowns,x)
+            x=self._convert_phase_fractions_to_mass_fractions(sample.knowns, x)
             alpha_l=np.array(x)/predicted_error
             dirichlet_likelihood.append(dirichlet.pdf(mass_weights,alpha_l))
 
@@ -935,7 +935,7 @@ class PICIP:
                 if np.any(np.abs(x_bary) < floor):
                     x_bary = np.array([floor if v < floor else v - floor
                                        for v in x_bary])
-                x_mass = self._convert_weights_moletomass(sample.knowns, x_bary)
+                x_mass = self._convert_phase_fractions_to_mass_fractions(sample.knowns, x_bary)
                 alpha_c = np.array(x_mass) / predicted_error
                 try:
                     pdf_c = float(dirichlet.pdf(mass_weights, alpha_c))
@@ -1008,7 +1008,7 @@ class PICIP:
         for x in bary:
             if np.any(np.abs(x) < floor):
                 x = [floor if v < floor else v - floor for v in x]
-            x_mass  = self._convert_weights_moletomass(sample.knowns, x)
+            x_mass  = self._convert_phase_fractions_to_mass_fractions(sample.knowns, x)
             alpha_l = np.array(x_mass) / predicted_error
             try:
                 pdf = float(dirichlet.pdf(mass_weights, alpha_l))
@@ -1579,7 +1579,7 @@ class PICIP:
             for c, alpha in zip(cs, alphas):
                 a = np.where(np.abs(alpha) < floor, floor, alpha)
                 a = a / a.sum()
-                mass_alpha = self._convert_weights_moletomass(sample.knowns, a)
+                mass_alpha = self._convert_phase_fractions_to_mass_fractions(sample.knowns, a)
                 try:
                     lj = float(dirichlet.pdf(mass_obs, mass_alpha / sigma))
                 except (ValueError, ZeroDivisionError):
@@ -1622,7 +1622,7 @@ class PICIP:
             for cc, alpha in zip(cs_c, alphas_c):
                 a = np.where(np.abs(alpha) < floor, floor, alpha)
                 a = a / a.sum()
-                mass_alpha = self._convert_weights_moletomass(sample.knowns, a)
+                mass_alpha = self._convert_phase_fractions_to_mass_fractions(sample.knowns, a)
                 try:
                     lj = float(dirichlet.pdf(mass_obs, mass_alpha / sigma))
                 except (ValueError, ZeroDivisionError):
@@ -1789,8 +1789,9 @@ class PICIP:
             p=np.nan_to_num(p)
         return(p/np.sum(p))
 
-    def _convert_weights_moletomass(self, phases, weights):
-        """Convert mole-fraction phase_fractions to mass-fraction phase_fractions for the given phases."""
+    def _convert_phase_fractions_to_mass_fractions(self, phases, weights):
+        """Convert phase-fraction weights as used in the `Sample` class
+        to mass-fraction weights for the given phases."""
         molar_masses=np.array([phase.weight for phase in phases])
         mass_weights=molar_masses*weights
         weights=np.array(mass_weights)/sum(mass_weights)
