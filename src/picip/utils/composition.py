@@ -7,7 +7,7 @@ import numpy.typing as npt
 from pymatgen.core import Composition
 
 
-def atom_count(compositions: Iterable[Composition]) -> npt.NDArray[np.float64]:
+def atom_count(compositions: Collection[Composition]) -> npt.NDArray[np.float64]:
     raise NotImplementedError
 
 
