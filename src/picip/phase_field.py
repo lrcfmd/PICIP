@@ -1193,9 +1193,7 @@ class Phase_Field:
         ndarray
             Composition in standard representation.
         """
-        c = Composition(composition)
-        s = [c.get_atomic_fraction(el) for el in self.elements]
-        return s
+        return composition_to_standard_basis(Composition(composition), self.elements)
 
     def constraint_failures(self, point, tol=0.01):
         """
