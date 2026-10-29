@@ -254,6 +254,7 @@ class Sample:
             Relative mass amounts for each known phase (e.g. Rietveld scale
             factors).  Need not be normalised.  Order must match add_knowns().
         """
+        mass_weights = np.array(mass_weights)
         if len(mass_weights) != len(self.knowns):
             raise ValueError(
                 f"mass_weights length ({len(mass_weights)}) does not match "
