@@ -10,13 +10,15 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 
+# --compile-bytecode: ship .pyc files, so each run (a fresh container, as
+# uid 1000 that cannot write them back) does not recompile every import.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-editable
+    uv sync --frozen --no-install-project --no-editable --compile-bytecode
 
 COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-editable
+    uv sync --frozen --no-editable --compile-bytecode
 
 
 # ---- runtime ----
