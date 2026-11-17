@@ -45,6 +45,8 @@ from scipy.interpolate import griddata
 from pymatgen.core import Composition
 import pandas as pd
 
+from .exceptions import InconsistentDataError
+
 
 def _requires_samples(method):
     """Guard decorator: raises ValueError if PICIP has no samples registered."""
@@ -460,10 +462,9 @@ class PICIP:
                 prob_density=np.prod(np.array(p_densities),axis=0)
 
         if np.any(np.isnan(prob_density)):
-            raise ValueError(
-                "Probability density contains NaN values.  This usually means a "
-                "Dirichlet PDF was evaluated at a degenerate point — check that "
-                "mass_weights are valid and predicted_error is not too small."
+            raise InconsistentDataError(
+                "The inference gave an undefined result for these inputs. Check that "
+                "every mass weight is above 0 and that predicted_error is not very small."
             )
 
         if prob_density.sum() == 0:
@@ -490,16 +491,17 @@ class PICIP:
                         )
                         break
                 else:
-                    raise ValueError(
-                        f"Combined density is still zero after {max_retries} retries "
-                        f"(predicted_error scaled up to {samples[0].predicted_error:.4f}). "
-                        "The samples may not be consistent with a common unknown phase."
+                    raise InconsistentDataError(
+                        f"The samples do not agree on any unknown phase: the combined "
+                        f"probability is still zero after {max_retries} retries with "
+                        f"predicted_error raised to {samples[0].predicted_error:.4f}. "
+                        "Check the samples, or run them separately."
                     )
             else:
-                raise ValueError(
-                    "Probability density is zero everywhere — check that the sample "
-                    "composition and knowns are consistent, and that predicted_error "
-                    "is not too small."
+                raise InconsistentDataError(
+                    "No composition in the phase field is consistent with the sample and "
+                    "its known phases. Check the sample composition and the known phases, "
+                    "or increase predicted_error."
                 )
 
         prob_density=prob_density/prob_density.sum()

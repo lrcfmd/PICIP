@@ -4,6 +4,9 @@ from pathlib import Path
 
 import numpy as np
 
+from infrastructure.handler import InputError
+from model.exceptions import InconsistentDataError, ZeroPException
+from model.inputs import _whole_number, check_dataset, read_dataset_file
 from model.phase_field import Phase_Field
 from model.picip import PICIP, Sample
 from model.visualise_cube import make_plotter
@@ -29,11 +32,15 @@ class PicipModel:
             elements = [e.strip() for e in elements.split(",") if e.strip()] if "," in elements else [elements]
 
         composition = values.get("composition") or default_composition
-        knowns = values.get("knowns") or ["FeMn"]
-        mass_weights = values.get("mass_weights") or [1.0]
+        # Not given at all -> the schema default; given but empty -> an error
+        # (a sample needs at least one known phase).
+        knowns = values.get("knowns")
+        if knowns is None:
+            knowns = ["FeMn"]
+        mass_weights = values.get("mass_weights")
 
         predicted_error = parameters.get("predicted_error", 0.3)
-        n_suggestions = int(parameters.get("n_suggestions", 5))
+        n_suggestions = _whole_number(parameters.get("n_suggestions", 5), "n_suggestions", 1)
 
         sample_data = {
             "name": composition,
@@ -60,10 +67,10 @@ class PicipModel:
 
     def _process_dataset(self, files, output_dir, parameters, logger):
         if "file" not in files:
-            raise ValueError("No input file provided")
+            raise InputError("No input file provided: upload the JSON file describing the phase field and samples.")
         input_path, _ = files["file"]
 
-        data = json.loads(Path(input_path).read_text())
+        data = read_dataset_file(input_path)
         logger.info("loaded dataset", path=str(input_path))
 
         # dataset mode merges parameters into data (parameters are top-level
@@ -103,6 +110,8 @@ class PicipModel:
 
     def _run_from_data(self, data, output_dir, logger) -> int:
         """Run PICIP inference from a parsed data dict, write assets, return sample count."""
+        # Check everything the user supplied before building the grid.
+        data = check_dataset(data)
         pf = self._build_phase_field(data["phase_field"])
         logger.info("phase field", elements=pf.elements, constrained_dim=pf.constrained_dim)
 
@@ -123,7 +132,16 @@ class PicipModel:
         n_l = int(data.get("n_l", 50))
         n_p = int(data.get("n_p", 50))
         version = data.get("version", "b")
-        pred = picip.run(n_l=n_l, n_p=n_p, version=version)
+        try:
+            pred = picip.run(n_l=n_l, n_p=n_p, version=version)
+        except InconsistentDataError as e:
+            raise InputError(str(e)) from None
+        except ZeroPException:
+            raise InputError(
+                "No composition in the phase field is consistent with the sample and its "
+                "known phases. Check the sample composition, the known phases and their "
+                "mass weights, or increase predicted_error."
+            ) from None
         logger.info("inference complete")
 
         n_suggestions = int(data.get("n_suggestions", 5))

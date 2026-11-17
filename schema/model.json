@@ -1,16 +1,19 @@
 {
   "$schema": "./model.schema.json",
+  "name": "picip",
 
   "parameters": {
     "predicted_error": {
       "type": "number",
-      "description": "Uncertainty in mass weights: 0 = precise, 1 = rough. Default 0.3",
-      "default": 0.3
+      "description": "Uncertainty in the mass weights (instance mode), above 0: small = precise, 1 = rough. Default 0.3",
+      "default": 0.3,
+      "minimum": 0
     },
     "n_suggestions": {
       "type": "integer",
-      "description": "Number of suggested next compositions to return. Default 5",
-      "default": 5
+      "description": "Number of suggested next compositions to return (at least 1). Default 5",
+      "default": 5,
+      "minimum": 1
     }
   },
 
@@ -24,28 +27,32 @@
             "type": "array",
             "items": { "type": "string" },
             "required": true,
-            "description": "Elements in the phase field (e.g. [\"Fe\", \"Mn\", \"Ti\"])",
-            "default": ["Fe", "Mn", "Ti"]
+            "description": "Elements in the phase field: 3 or 4 element symbols, e.g. Fe, Mn, Ti",
+            "default": ["Fe", "Mn", "Ti"],
+            "minItems": 3,
+            "maxItems": 4
           },
           "composition": {
             "type": "string",
             "required": true,
-            "description": "Measured sample composition as a pymatgen formula string (e.g. \"Fe2Mn4Ti4\")",
+            "description": "Measured sample composition as a formula using only the phase-field elements, e.g. Fe2Mn4Ti4",
             "default": "Fe2Mn4Ti4"
           },
           "knowns": {
             "type": "array",
             "items": { "type": "string" },
             "required": false,
-            "description": "Known co-existing phases identified by XRD (list of formula strings)",
-            "default": []
+            "description": "Known phases identified by XRD: 1 to 3 formulas using only the phase-field elements, e.g. FeMn",
+            "default": ["FeMn"],
+            "minItems": 1,
+            "maxItems": 3
           },
           "mass_weights": {
             "type": "array",
-            "items": { "type": "number" },
+            "items": { "type": "number", "minimum": 0 },
             "required": false,
-            "description": "Rietveld mass fractions for each known phase (same order as knowns)",
-            "default": []
+            "description": "Rietveld mass fraction of each known phase, above 0, in the same order as knowns (may be left empty for a single known)",
+            "default": [1.0]
           }
         },
         "outputs": {
@@ -78,7 +85,8 @@
             "type": "file",
             "mime_type": "application/json",
             "required": true,
-            "description": "Input JSON file with phase_field and samples configuration (see input_schema.json for the structure)"
+            "description": "JSON file: \"phase_field\" (type uncharged / charged / charge_ranges / custom, and its elements) and \"samples\" (each with composition, 1-3 knowns and their mass_weights); optional n_suggestions, n_l, n_p, min_dist, plot",
+            "example": "{\n  \"phase_field\": {\"type\": \"uncharged\", \"elements\": [\"Fe\", \"Mn\", \"Ti\"]},\n  \"samples\": [\n    {\"name\": \"s1\", \"composition\": \"Fe2Mn4Ti4\", \"knowns\": [\"FeMn\", \"FeTi\"], \"mass_weights\": [0.3, 0.7], \"predicted_error\": 0.3}\n  ],\n  \"n_suggestions\": 5\n}\n"
           }
         },
         "outputs": {
